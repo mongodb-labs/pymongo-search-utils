@@ -77,6 +77,9 @@ def test_search_index_create_and_drop(collection: Collection) -> None:
     assert len(indexes) == 0
 
 
+@pytest.mark.skip(
+    "collection.update_vector_search_index requires [https://jira.mongodb.org/browse/DRIVERS-3078]"
+)
 def test_search_index_update_vector_search_index(collection: Collection) -> None:
     index_name = "INDEX_TO_UPDATE"
     similarity_orig = "cosine"
