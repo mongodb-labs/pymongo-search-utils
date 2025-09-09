@@ -1,0 +1,82 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pymongo-vectorsearch-utils"
+dynamic = ["version"]
+description = "Utility library for working with vector search in MongoDB using PyMongo"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Noah Stapp", email = "noah.stapp@mongodb.com" },
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "pymongo>=4.12.0",
+]
+
+[project.urls]
+Download = "https://github.com/mongodb-labs/pymongo-vectorsearch-utils/tags"
+Homepage = "http://pymongo-vectorsearch-utils.readthedocs.org/"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "mypy>=1.15.0",
+    "pip>=25.0.1",
+    "pre-commit>=4.2.0",
+]
+
+[tool.hatch.version]
+path = "pymongo_vectorsearch_utils/_version.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/pymongo_vectorsearch_utils",
+]
+
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
+xfail_strict = true
+log_cli_level = "info"
+testpaths = [
+  "tests",
+]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+exclude = ["tests/"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+  "I",  # isort
+]
+unfixable = [
+  "RUF100", # Unused noqa
+  "T20",  # Removes print statements
+  "F401",  # Unused imports
+]
