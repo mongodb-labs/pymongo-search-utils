@@ -186,6 +186,31 @@ def update_vector_search_index(
     logger.info("Update succeeded")
 
 
+def drop_vector_search_index(
+    collection: Collection[Any],
+    index_name: str,
+    *,
+    wait_until_complete: float | None = None,
+) -> None:
+    """Drop a created vector search index.
+
+    Args:
+        collection (Collection): MongoDB Collection with index to be dropped.
+        index_name (str): Name of the MongoDB index.
+        wait_until_complete (Optional[float]): If provided, number of seconds to wait
+            until search index is ready.
+    """
+    logger.info("Dropping Search Index %s from Collection: %s", index_name, collection.name)
+    collection.drop_search_index(index_name)
+    if wait_until_complete:
+        wait_for_predicate(
+            predicate=lambda: len(list(collection.list_search_indexes())) == 0,
+            err=f"Index {index_name} did not drop in {wait_until_complete}!",
+            timeout=wait_until_complete,
+        )
+    logger.info("Vector Search index %s.%s dropped", collection.name, index_name)
+
+
 def create_fulltext_search_index(
     collection: Collection[Any],
     index_name: str,
