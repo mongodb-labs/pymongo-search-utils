@@ -99,7 +99,7 @@ def create_vector_search_index(
     wait_until_complete: float | None = None,
     **kwargs: Any,
 ) -> None:
-    """Experimental Utility function to create a vector search index
+    """Create a vector search index on the specified field.
 
     Args:
         collection (Collection): MongoDB Collection
@@ -192,7 +192,7 @@ def drop_vector_search_index(
     *,
     wait_until_complete: float | None = None,
 ) -> None:
-    """Drop a created vector search index.
+    """Drop an existing vector search index.
 
     Args:
         collection (Collection): MongoDB Collection with index to be dropped.
@@ -219,7 +219,7 @@ def create_fulltext_search_index(
     wait_until_complete: float | None = None,
     **kwargs: Any,
 ) -> None:
-    """Experimental Utility function to create an Atlas Search index
+    """Create a fulltext search index on the specified field(s).
 
     Args:
         collection (Collection): MongoDB Collection
@@ -262,8 +262,7 @@ def wait_for_docs_in_index(
     embedding_field: str,
     n_docs: int,
 ) -> bool:
-    """Inserts texts using the provided insert_func and then waits for texts
-    to be indexed before returning.
+    """Wait until the given number of documents are indexed by the given index.
 
     Args:
         collection (Collection): A MongoDB Collection.
