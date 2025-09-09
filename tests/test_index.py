@@ -1,3 +1,5 @@
+"""Tests for index operation utilities."""
+
 import os
 from collections.abc import Generator
 
@@ -34,7 +36,6 @@ def collection(client) -> Generator:
         clxn = client[DB_NAME].create_collection(COLLECTION_NAME)
     else:
         clxn = client[DB_NAME][COLLECTION_NAME]
-    clxn = client[DB_NAME][COLLECTION_NAME]
     clxn.delete_many({})
     yield clxn
     clxn.delete_many({})
@@ -81,7 +82,6 @@ def test_search_index_update_vector_search_index(collection: Collection) -> None
     similarity_orig = "cosine"
     similarity_new = "euclidean"
 
-    # Create another index
     create_vector_search_index(
         collection=collection,
         index_name=index_name,
@@ -97,7 +97,6 @@ def test_search_index_update_vector_search_index(collection: Collection) -> None
     assert indexes[0]["name"] == index_name
     assert indexes[0]["latestDefinition"]["fields"][0]["similarity"] == similarity_orig
 
-    # Update the index and test new similarity
     update_vector_search_index(
         collection=collection,
         index_name=index_name,
