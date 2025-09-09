@@ -5,6 +5,7 @@ from .index import (
     drop_vector_search_index,
     update_vector_search_index,
 )
+from .operation import bulk_embed_and_insert_texts
 from .pipeline import (
     combine_pipelines,
     final_hybrid_stage,
@@ -12,6 +13,7 @@ from .pipeline import (
     text_search_stage,
     vector_search_stage,
 )
+from .util import oid_to_str, str_to_oid
 
 __all__ = [
     "__version__",
@@ -24,4 +26,7 @@ __all__ = [
     "combine_pipelines",
     "reciprocal_rank_stage",
     "final_hybrid_stage",
+    "bulk_embed_and_insert_texts",
+    "str_to_oid",
+    "oid_to_str",
 ]
