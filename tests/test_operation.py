@@ -24,6 +24,7 @@ def client():
     yield client
     client.close()
 
+
 @pytest.fixture(scope="module")
 def preserved_collection(client):
     if COLLECTION_NAME not in client[DB_NAME].list_collection_names():
@@ -33,6 +34,7 @@ def preserved_collection(client):
     clxn.delete_many({})
     yield clxn
     clxn.delete_many({})
+
 
 @pytest.fixture
 def collection(client):
@@ -325,7 +327,13 @@ class TestExecuteSearchQuery:
             embedding_key="embedding",
         )
         # Add a document that should not be returned in searches
-        preserved_collection.insert_one({'_id': ObjectId('68c1a038fd976373aa4ec19f'), 'category': 'fruit', 'color': 'red', 'embedding': [1.0, 1.0, 1.0]})
+        preserved_collection.insert_one(
+            {
+                "category": "fruit",
+                "color": "red",
+                "embedding": [1.0, 1.0, 1.0],
+            }
+        )
         wait_for_docs_in_index(preserved_collection, VECTOR_INDEX_NAME, n_docs=5)
         return preserved_collection
 

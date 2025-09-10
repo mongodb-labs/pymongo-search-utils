@@ -92,7 +92,6 @@ def execute_search_query(
         {"$set": {"score": {"$meta": "vectorSearchScore"}}},
     ]
 
-
     # Remove embeddings unless requested.
     if not include_embeddings:
         pipeline.append({"$project": {embedding_key: 0}})
