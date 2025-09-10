@@ -259,7 +259,6 @@ def create_fulltext_search_index(
 def wait_for_docs_in_index(
     collection: Collection[Any],
     index_name: str,
-    embedding_field: str,
     n_docs: int,
 ) -> bool:
     """Wait until the given number of documents are indexed by the given index.
@@ -270,12 +269,19 @@ def wait_for_docs_in_index(
         embedding_field (str): The name of the document field containing embeddings.
         n_docs (int): The number of documents to expect in the index.
     """
-    query_vector = [0.0] * 1024  # Dummy vector
+    indexes = collection.list_search_indexes(index_name).to_list()
+    if len(indexes) == 0:
+        raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
+    index = indexes[0]
+    num_dimensions = index["latestDefinition"]["fields"][0]["numDimensions"]
+    field = index["latestDefinition"]["fields"][0]["path"]
+
+    query_vector = [0.001] * num_dimensions  # Dummy vector
     query = [
         {
             "$vectorSearch": {
                 "index": index_name,
-                "path": embedding_field,
+                "path": field,
                 "queryVector": query_vector,
                 "numCandidates": n_docs,
                 "limit": n_docs,
