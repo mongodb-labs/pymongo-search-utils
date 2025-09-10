@@ -5,6 +5,7 @@ from .index import (
     drop_vector_search_index,
     update_vector_search_index,
 )
+from .operation import bulk_embed_and_insert_texts
 from .pipeline import (
     combine_pipelines,
     final_hybrid_stage,
@@ -24,4 +25,5 @@ __all__ = [
     "combine_pipelines",
     "reciprocal_rank_stage",
     "final_hybrid_stage",
+    "bulk_embed_and_insert_texts",
 ]
