@@ -269,7 +269,10 @@ def wait_for_docs_in_index(
         embedding_field (str): The name of the document field containing embeddings.
         n_docs (int): The number of documents to expect in the index.
     """
-    index = collection.list_search_indexes(index_name).to_list()[0]
+    indexes = collection.list_search_indexes(index_name).to_list()
+    if len(indexes) == 0:
+        raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
+    index = indexes[0]
     num_dimensions = index["latestDefinition"]["fields"][0]["numDimensions"]
     field = index["latestDefinition"]["fields"][0]["path"]
 

@@ -298,7 +298,7 @@ class TestExecuteSearchQuery:
         drop_vector_search_index(collection=coll, index_name=VECTOR_INDEX_NAME)
 
     @pytest.fixture(scope="class", autouse=True)
-    def sample_docs(self, preserved_collection: Collection):
+    def sample_docs(self, preserved_collection: Collection, vector_search_index):
         texts = ["apple fruit", "banana fruit", "car vehicle", "bike vehicle"]
         metadatas = [
             {"category": "fruit", "color": "red"},
