@@ -13,7 +13,6 @@ from .pipeline import (
     text_search_stage,
     vector_search_stage,
 )
-from .util import oid_to_str, str_to_oid
 
 __all__ = [
     "__version__",
@@ -27,6 +26,4 @@ __all__ = [
     "reciprocal_rank_stage",
     "final_hybrid_stage",
     "bulk_embed_and_insert_texts",
-    "str_to_oid",
-    "oid_to_str",
 ]
