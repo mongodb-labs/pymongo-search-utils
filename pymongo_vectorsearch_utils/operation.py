@@ -1,4 +1,4 @@
-"""Tests for CRUD utilities."""
+"""CRUD utilities and helpers."""
 
 from collections.abc import Callable, Generator, Iterable
 from typing import Any
