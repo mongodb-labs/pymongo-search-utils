@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from pymongo import MongoClient, AsyncMongoClient
+from pymongo import AsyncMongoClient, MongoClient
 from pymongo.driver_info import DriverInfo
 
 logger = logging.getLogger(__file__)
