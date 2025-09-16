@@ -13,6 +13,7 @@ from .pipeline import (
     text_search_stage,
     vector_search_stage,
 )
+from .util import append_client_metadata
 
 __all__ = [
     "__version__",
@@ -26,4 +27,5 @@ __all__ = [
     "reciprocal_rank_stage",
     "final_hybrid_stage",
     "bulk_embed_and_insert_texts",
+    "append_client_metadata",
 ]
