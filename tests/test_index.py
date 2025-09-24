@@ -7,14 +7,14 @@ import pytest
 from pymongo import MongoClient
 from pymongo.collection import Collection
 
-from pymongo_vectorsearch_utils.index import (
+from pymongo_search_utils.index import (
     create_vector_search_index,
     drop_vector_search_index,
     is_index_ready,
     update_vector_search_index,
 )
 
-DB_NAME = "vectorsearch_utils_test"
+DB_NAME = "pymongo_search_utils_test"
 COLLECTION_NAME = "test_index"
 VECTOR_INDEX_NAME = "vector_index"
 

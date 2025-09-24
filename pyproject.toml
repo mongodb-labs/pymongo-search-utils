@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pymongo-vectorsearch-utils"
+name = "pymongo-search-utils"
 dynamic = ["version"]
 description = "Utility library for working with vector search in MongoDB using PyMongo"
 readme = "README.md"
@@ -29,8 +29,8 @@ dependencies = [
 ]
 
 [project.urls]
-Download = "https://github.com/mongodb-labs/pymongo-vectorsearch-utils/tags"
-Homepage = "http://pymongo-vectorsearch-utils.readthedocs.org/"
+Download = "https://github.com/mongodb-labs/pymongo-search-utils/tags"
+Homepage = "http://pymongo-search-utils.readthedocs.org/"
 
 [dependency-groups]
 dev = [
@@ -41,11 +41,11 @@ dev = [
 ]
 
 [tool.hatch.version]
-path = "pymongo_vectorsearch_utils/_version.py"
+path = "pymongo_search_utils/_version.py"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/pymongo_vectorsearch_utils",
+    "/pymongo_search_utils",
 ]
 
 

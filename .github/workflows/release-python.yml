@@ -14,7 +14,7 @@ on:
 
 env:
   # Changes per repo
-  PRODUCT_NAME: pymongo-vectorsearch-utils
+  PRODUCT_NAME: pymongo-search-utils
   # Constant
   # inputs will be empty on a scheduled run.  so, we only set dry_run
   # to 'false' when the input is set to 'false'.

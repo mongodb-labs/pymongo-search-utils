@@ -1,6 +1,6 @@
 """Tests for pipeline aggregation generator utilities."""
 
-from pymongo_vectorsearch_utils.pipeline import (
+from pymongo_search_utils.pipeline import (
     combine_pipelines,
     final_hybrid_stage,
     reciprocal_rank_stage,

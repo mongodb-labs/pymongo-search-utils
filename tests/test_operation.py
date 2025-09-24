@@ -8,11 +8,11 @@ from bson import ObjectId
 from pymongo import MongoClient
 from pymongo.collection import Collection
 
-from pymongo_vectorsearch_utils import drop_vector_search_index
-from pymongo_vectorsearch_utils.index import create_vector_search_index, wait_for_docs_in_index
-from pymongo_vectorsearch_utils.operation import bulk_embed_and_insert_texts, execute_search_query
+from pymongo_search_utils import drop_vector_search_index
+from pymongo_search_utils.index import create_vector_search_index, wait_for_docs_in_index
+from pymongo_search_utils.operation import bulk_embed_and_insert_texts, execute_search_query
 
-DB_NAME = "vectorsearch_utils_test"
+DB_NAME = "pymongo_search_utils_test"
 COLLECTION_NAME = "test_operation"
 VECTOR_INDEX_NAME = "operation_vector_index"
 

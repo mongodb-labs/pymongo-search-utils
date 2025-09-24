@@ -7,8 +7,8 @@ from bson import ObjectId
 from pymongo import ReplaceOne
 from pymongo.synchronous.collection import Collection
 
-from pymongo_vectorsearch_utils.pipeline import vector_search_stage
-from pymongo_vectorsearch_utils.util import oid_to_str, str_to_oid
+from pymongo_search_utils.pipeline import vector_search_stage
+from pymongo_search_utils.util import oid_to_str, str_to_oid
 
 
 def bulk_embed_and_insert_texts(
