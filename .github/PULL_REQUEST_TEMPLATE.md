@@ -14,7 +14,7 @@
 
 ### Screenshots (optional)
 
-<!-- Usually a great supplement to a test plan, especially if this requires local testing. -->
+<!-- Show any visible "before and after" resulting from this change; Can also be text output -->
 
 ## Checklist
 
