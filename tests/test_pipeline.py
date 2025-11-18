@@ -196,7 +196,9 @@ class TestReciprocalRankStage:
             {"$unwind": {"path": "$docs", "includeArrayIndex": "rank"}},
             {
                 "$addFields": {
-                    "docs.text_score": {"$divide": [1.0, {"$add": ["$rank", 0, 1]}]},
+                    "docs.text_score": {
+                        "$multiply": [1, {"$divide": [1.0, {"$add": ["$rank", 0, 1]}]}]
+                    },
                     "docs.rank": "$rank",
                     "_id": "$docs._id",
                 }
@@ -210,7 +212,7 @@ class TestReciprocalRankStage:
         result = reciprocal_rank_stage(score_field="vector_score", penalty=60)
 
         add_fields_stage = result[2]["$addFields"]
-        divide_expr = add_fields_stage["docs.vector_score"]["$divide"]
+        divide_expr = add_fields_stage["docs.vector_score"]["$multiply"][1]["$divide"]
         add_expr = divide_expr[1]["$add"]
 
         assert add_expr == ["$rank", 60, 1]
@@ -225,7 +227,11 @@ class TestReciprocalRankStage:
         result = reciprocal_rank_stage(score_field="test_score", penalty=10, extra_param="ignored")
 
         assert len(result) == 4
-        assert result[2]["$addFields"]["docs.test_score"]["$divide"][1]["$add"] == ["$rank", 10, 1]
+        assert result[2]["$addFields"]["docs.test_score"]["$multiply"][1]["$divide"][1]["$add"] == [
+            "$rank",
+            10,
+            1,
+        ]
 
 
 class TestFinalHybridStage:
