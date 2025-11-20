@@ -17,6 +17,7 @@ def vector_search_index_definition(
     path: str,
     similarity: str,
     filters: list[str] | None = None,
+    vector_index_options: dict | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Create a vector search index definition.
@@ -40,6 +41,7 @@ def vector_search_index_definition(
             "path": path,
             "similarity": similarity,
             "type": "vector",
+            **(vector_index_options or {}),
         },
     ]
     if filters:
@@ -95,6 +97,7 @@ def create_vector_search_index(
     path: str,
     similarity: str,
     filters: list[str] | None = None,
+    vector_index_options: dict | None = None,
     *,
     wait_until_complete: float | None = None,
     **kwargs: Any,
@@ -124,6 +127,7 @@ def create_vector_search_index(
                 path=path,
                 similarity=similarity,
                 filters=filters,
+                vector_index_options=vector_index_options,
                 **kwargs,
             ),
             name=index_name,
@@ -147,6 +151,7 @@ def update_vector_search_index(
     path: str,
     similarity: str,
     filters: list[str] | None = None,
+    vector_index_options: dict | None = None,
     *,
     wait_until_complete: float | None = None,
     **kwargs: Any,
@@ -174,6 +179,7 @@ def update_vector_search_index(
             path=path,
             similarity=similarity,
             filters=filters,
+            vector_index_options=vector_index_options,
             **kwargs,
         ),
     )
