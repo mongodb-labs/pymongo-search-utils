@@ -80,10 +80,11 @@ def test_search_index_create_and_drop(collection: Collection, mock_search_indexe
         if name in mock_search_indexes:
             del mock_search_indexes[name]
 
-    with patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes), \
-         patch.object(collection, "create_search_index", side_effect=mock_create_search_index), \
-         patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index):
-
+    with (
+        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
+        patch.object(collection, "create_search_index", side_effect=mock_create_search_index),
+        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
+    ):
         for index_info in collection.list_search_indexes():
             drop_vector_search_index(
                 collection, index_info["name"], wait_until_complete=wait_until_complete
@@ -216,7 +217,9 @@ def test_wait_for_predicate() -> None:
         wait_for_predicate(always_false, "Predicate failed", timeout=0.5, interval=0.1)
 
 
-def test_create_fulltext_search_index_single_field(collection: Collection, mock_search_indexes: dict) -> None:
+def test_create_fulltext_search_index_single_field(
+    collection: Collection, mock_search_indexes: dict
+) -> None:
     """Test creating a fulltext search index on a single field."""
     index_name = FULLTEXT_INDEX_NAME
     field = "description"
@@ -241,10 +244,11 @@ def test_create_fulltext_search_index_single_field(collection: Collection, mock_
         if name in mock_search_indexes:
             del mock_search_indexes[name]
 
-    with patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes), \
-         patch.object(collection, "create_search_index", side_effect=mock_create_search_index), \
-         patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index):
-
+    with (
+        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
+        patch.object(collection, "create_search_index", side_effect=mock_create_search_index),
+        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
+    ):
         # Clean up existing indexes
         for index_info in collection.list_search_indexes():
             drop_vector_search_index(
@@ -272,7 +276,9 @@ def test_create_fulltext_search_index_single_field(collection: Collection, mock_
         drop_vector_search_index(collection, index_name, wait_until_complete=wait_until_complete)
 
 
-def test_create_fulltext_search_index_multiple_fields(collection: Collection, mock_search_indexes: dict) -> None:
+def test_create_fulltext_search_index_multiple_fields(
+    collection: Collection, mock_search_indexes: dict
+) -> None:
     """Test creating a fulltext search index on multiple fields."""
     index_name = "fulltext_multi_index"
     fields = ["title", "description", "content"]
@@ -297,10 +303,11 @@ def test_create_fulltext_search_index_multiple_fields(collection: Collection, mo
         if name in mock_search_indexes:
             del mock_search_indexes[name]
 
-    with patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes), \
-         patch.object(collection, "create_search_index", side_effect=mock_create_search_index), \
-         patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index):
-
+    with (
+        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
+        patch.object(collection, "create_search_index", side_effect=mock_create_search_index),
+        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
+    ):
         # Clean up existing indexes
         for index_info in collection.list_search_indexes():
             drop_vector_search_index(
@@ -343,6 +350,7 @@ def test_wait_for_docs_in_index(collection: Collection, mock_search_indexes: dic
     def mock_list_search_indexes(name=None):
         if name:
             result = [mock_search_indexes[name]] if name in mock_search_indexes else []
+
             # When called with a name parameter (e.g., for is_index_ready), return an iterable
             # When called with a name parameter for wait_for_docs_in_index, return a mock cursor
             # We need to check the context - if it has to_list, it's for wait_for_docs_in_index
@@ -384,11 +392,12 @@ def test_wait_for_docs_in_index(collection: Collection, mock_search_indexes: dic
         mock_cursor.to_list.return_value = [{"_id": i, "search_score": 0.9} for i in range(n_docs)]
         return mock_cursor
 
-    with patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes), \
-         patch.object(collection, "create_search_index", side_effect=mock_create_search_index), \
-         patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index), \
-         patch.object(collection, "aggregate", side_effect=mock_aggregate):
-
+    with (
+        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
+        patch.object(collection, "create_search_index", side_effect=mock_create_search_index),
+        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
+        patch.object(collection, "aggregate", side_effect=mock_aggregate),
+    ):
         # Clean up existing indexes
         for index_info in list(mock_search_indexes.values()):
             drop_vector_search_index(
@@ -413,12 +422,15 @@ def test_wait_for_docs_in_index(collection: Collection, mock_search_indexes: dic
         drop_vector_search_index(collection, index_name, wait_until_complete=wait_until_complete)
 
 
-def test_wait_for_docs_in_index_nonexistent(collection: Collection, mock_search_indexes: dict) -> None:
+def test_wait_for_docs_in_index_nonexistent(
+    collection: Collection, mock_search_indexes: dict
+) -> None:
     """Test wait_for_docs_in_index raises error for non-existent index."""
 
     def mock_list_search_indexes(name=None):
         if name:
             result = [mock_search_indexes[name]] if name in mock_search_indexes else []
+
             # Return a mock cursor with to_list method
             class MockIndexCursor:
                 def __init__(self, data):
@@ -437,9 +449,10 @@ def test_wait_for_docs_in_index_nonexistent(collection: Collection, mock_search_
         if name in mock_search_indexes:
             del mock_search_indexes[name]
 
-    with patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes), \
-         patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index):
-
+    with (
+        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
+        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
+    ):
         # Ensure no indexes exist
         for index_info in list(mock_search_indexes.values()):
             drop_vector_search_index(collection, index_info["name"], wait_until_complete=TIMEOUT)
