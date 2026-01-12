@@ -11,13 +11,29 @@ INTERVAL = 0.5
 
 logger = logging.getLogger(__file__)
 
+def check_param_config(
+    dimensions: int,
+    similarity: str | None,
+    autoembedded: bool = False,
+    embedding_model: str | None = None
+):
+    if autoembedded and dimensions != -1 and similarity is not None:
+        raise ValueError # idk what error msg should be here
+    if autoembedded and embedding_model is None:
+        raise ValueError("Auto-embedding requires a embedding model to be selected")
+    if not autoembedded and embedding_model is not None:
+        raise ValueError("auto-embedding model can only be selected with autoembeddings.")
+    if not autoembedded and dimensions is None and similarity is None:
+        raise ValueError("please specify dimensions and similarity.")
 
 def vector_search_index_definition(
     dimensions: int,
     path: str,
-    similarity: str,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
+    autoembedded: bool = False,
+    embedding_model: str | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Create a vector search index definition.
@@ -35,15 +51,28 @@ def vector_search_index_definition(
         A dictionary representing the vector search index definition.
     """
     # https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-type/
-    fields = [
-        {
-            "numDimensions": dimensions,
-            "path": path,
-            "similarity": similarity,
-            "type": "vector",
-            **(vector_index_options or {}),
-        },
-    ]
+    check_param_config(dimensions, similarity, autoembedded, embedding_model)
+
+    if autoembedded:
+        fields = [
+            {
+                "type": "autoEmbed",
+                "path": path,
+                "model": embedding_model,
+                "modality": "text",
+                **(vector_index_options or {}),
+            },
+        ]
+    else:
+        fields = [
+            {
+                "numDimensions": dimensions,
+                "path": path,
+                "similarity": similarity,
+                "type": "vector",
+                **(vector_index_options or {}),
+            },
+        ]
     if filters:
         for field in filters:
             fields.append({"type": "filter", "path": field})
@@ -93,13 +122,15 @@ def wait_for_predicate(
 def create_vector_search_index(
     collection: Collection[Any],
     index_name: str,
-    dimensions: int,
+    dimensions: int, # ***
     path: str,
-    similarity: str,
+    similarity: str, # ***
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     *,
     wait_until_complete: float | None = None,
+    autoembedded: bool = False,
+    embedding_model: str | None = None,
     **kwargs: Any,
 ) -> None:
     """Create a vector search index on the specified field.
@@ -117,6 +148,8 @@ def create_vector_search_index(
     """
     logger.info("Creating Search Index %s on %s", index_name, collection.name)
 
+    check_param_config(dimensions, similarity, autoembedded, embedding_model)
+
     if collection.name not in collection.database.list_collection_names():
         collection.database.create_collection(collection.name)
 
@@ -128,6 +161,8 @@ def create_vector_search_index(
                 similarity=similarity,
                 filters=filters,
                 vector_index_options=vector_index_options,
+                autoembedded=autoembedded,
+                embedding_model=embedding_model,
                 **kwargs,
             ),
             name=index_name,
@@ -149,11 +184,13 @@ def update_vector_search_index(
     index_name: str,
     dimensions: int,
     path: str,
-    similarity: str,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     *,
     wait_until_complete: float | None = None,
+    autoembedded: bool = False,
+    embedding_model: str | None = None,
     **kwargs: Any,
 ) -> None:
     """Update a search index.
@@ -172,6 +209,9 @@ def update_vector_search_index(
         kwargs: Keyword arguments supplying any additional options to SearchIndexModel.
     """
     logger.info("Updating Search Index %s from Collection: %s", index_name, collection.name)
+
+    check_param_config(dimensions, similarity, autoembedded, embedding_model)
+
     collection.update_search_index(
         name=index_name,
         definition=vector_search_index_definition(
@@ -180,6 +220,8 @@ def update_vector_search_index(
             similarity=similarity,
             filters=filters,
             vector_index_options=vector_index_options,
+            autoembedded=autoembedded,
+            embedding_model=embedding_model,
             **kwargs,
         ),
     )
