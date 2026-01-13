@@ -17,13 +17,13 @@ def check_param_config(
     autoembedded: bool = False,
     embedding_model: str | None = None
 ):
-    if autoembedded and dimensions != -1 and similarity is not None:
+    if autoembedded and (dimensions != -1 or similarity is not None):
         raise ValueError # idk what error msg should be here
     if autoembedded and embedding_model is None:
-        raise ValueError("Auto-embedding requires a embedding model to be selected")
+        raise ValueError("autoembedded requires a embedding model to be selected")
     if not autoembedded and embedding_model is not None:
-        raise ValueError("auto-embedding model can only be selected with autoembeddings.")
-    if not autoembedded and dimensions is None and similarity is None:
+        raise ValueError("autoembedded model can only be selected with autoembeddings.")
+    if not autoembedded and (dimensions == -1 or similarity is None):
         raise ValueError("please specify dimensions and similarity.")
 
 def vector_search_index_definition(

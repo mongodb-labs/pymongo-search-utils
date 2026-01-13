@@ -191,6 +191,37 @@ def test_vector_search_index_definition() -> None:
     )
     assert definition["storedSource"] is True
 
+    # Test autoembedding config
+    definition = vector_search_index_definition(
+        dimensions=-1, path="text", similarity=None, autoembedded=True, embedding_model="voyage-4"
+    )
+    assert "fields" in definition
+    assert len(definition["fields"]) == 1
+    assert definition["fields"][0]["type"] == 'autoEmbed'
+    assert definition["fields"][0]["path"] == "text"
+    assert definition["fields"][0]["model"] == "voyage-4"
+    assert definition["fields"][0]["modality"] == "text"
+
+    # Test bad config
+    with pytest.raises(ValueError):
+        vector_search_index_definition(
+            dimensions=64, path="text", similarity=None, autoembedded=True,
+            embedding_model="voyage-4"
+        )
+    with pytest.raises(ValueError):
+        vector_search_index_definition(
+            dimensions=-1, path="text", similarity=None, autoembedded=True,
+        )
+    with pytest.raises(ValueError):
+        vector_search_index_definition(
+            dimensions=64, path="text", similarity="cosine", autoembedded=False,
+            embedding_model="voyage-4"
+        )
+    with pytest.raises(ValueError):
+        vector_search_index_definition(
+            dimensions=-1, path="text", similarity="cosine", autoembedded=False,
+        )
+
 
 def test_wait_for_predicate() -> None:
     """Test the wait_for_predicate utility function."""
