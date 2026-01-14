@@ -19,6 +19,7 @@ def bulk_embed_and_insert_texts(
     text_key: str,
     embedding_key: str,
     ids: list[str] | None = None,
+    autoembedding: bool = False,
     **kwargs: Any,
 ) -> list[str]:
     """Bulk insert single batch of texts, embeddings, and optionally ids.
@@ -43,19 +44,31 @@ def bulk_embed_and_insert_texts(
     """
     if not texts:
         return []
-    # Compute embedding vectors
-    embeddings = embedding_func(list(texts))
+
     if not ids:
         ids = [str(ObjectId()) for _ in range(len(list(texts)))]
-    docs = [
-        {
-            "_id": str_to_oid(i),
-            text_key: t,
-            embedding_key: embedding,
-            **m,
-        }
-        for i, t, m, embedding in zip(ids, texts, metadatas, embeddings, strict=False)
-    ]
+
+    if autoembedding:
+        docs = [
+            {
+                "_id": str_to_oid(i),
+                text_key: t,
+                **m,
+            }
+            for i, t, m in zip(ids, texts, metadatas, strict=False)
+        ]
+    else:
+        # Compute embedding vectors
+        embeddings = embedding_func(list(texts))
+        docs = [
+            {
+                "_id": str_to_oid(i),
+                text_key: t,
+                embedding_key: embedding,
+                **m,
+            }
+            for i, t, m, embedding in zip(ids, texts, metadatas, embeddings, strict=False)
+        ]
     operations = [ReplaceOne({"_id": doc["_id"]}, doc, upsert=True) for doc in docs]
     # insert the documents in MongoDB Atlas
     result = collection.bulk_write(operations)

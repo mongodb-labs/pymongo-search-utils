@@ -27,6 +27,11 @@ FULLTEXT_INDEX_NAME = "fulltext_index"
 TIMEOUT = 120
 DIMENSIONS = 10
 
+COMMUNITY_WITH_SEARCH = os.environ.get("COMMUNITY_WITH_SEARCH", "")
+require_community = pytest.mark.skipif(
+    COMMUNITY_WITH_SEARCH == "", reason="Only run in COMMUNITY_WITH_SEARCH is set"
+)
+
 
 @pytest.fixture(scope="module")
 def client() -> Generator[MongoClient, None, None]:
@@ -190,6 +195,42 @@ def test_vector_search_index_definition() -> None:
         dimensions=64, path="vec", similarity="cosine", storedSource=True
     )
     assert definition["storedSource"] is True
+
+
+@require_community
+def test_vector_search_index_definition_for_autoembedding() -> None:
+    # Test autoembedding config
+    definition = vector_search_index_definition(
+        dimensions=-1, path="text", similarity=None, auto_embedding_model="voyage-4"
+    )
+    assert "fields" in definition
+    assert len(definition["fields"]) == 1
+    assert definition["fields"][0]["type"] == "autoEmbed"
+    assert definition["fields"][0]["path"] == "text"
+    assert definition["fields"][0]["model"] == "voyage-4"
+    assert definition["fields"][0]["modality"] == "text"
+
+    # Test bad config
+    with pytest.raises(ValueError):
+        vector_search_index_definition(
+            dimensions=64, path="text", similarity=None, auto_embedding_model="voyage-4"
+        )
+    with pytest.raises(ValueError):
+        vector_search_index_definition(
+            dimensions=-1,
+            path="text",
+            similarity=None,
+        )
+    with pytest.raises(ValueError):
+        vector_search_index_definition(
+            dimensions=64, path="text", similarity="cosine", auto_embedding_model="voyage-4"
+        )
+    with pytest.raises(ValueError):
+        vector_search_index_definition(
+            dimensions=-1,
+            path="text",
+            similarity="cosine",
+        )
 
 
 def test_wait_for_predicate() -> None:

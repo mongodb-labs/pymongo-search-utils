@@ -12,38 +12,71 @@ INTERVAL = 0.5
 logger = logging.getLogger(__file__)
 
 
-def vector_search_index_definition(
+def _check_param_config(
+    *,
     dimensions: int,
+    similarity: str | None,
+    auto_embedding_model: str | None,
+):
+    if auto_embedding_model is not None and (dimensions != -1 or similarity is not None):
+        raise ValueError(
+            "if auto_embedding_model is set, then neither dimensions nor similarity may be set."
+        )
+    if auto_embedding_model is None and (dimensions == -1 or similarity is None):
+        raise ValueError("please specify dimensions and similarity.")
+
+
+def vector_search_index_definition(
     path: str,
-    similarity: str,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
+    auto_embedding_model: str | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Create a vector search index definition.
 
     Args:
-        dimensions (int): The number of dimensions for vector embeddings.
+        dimensions (int): The number of dimensions for vector embeddings,
+            `None` if using auto-embeddings.
         path (str): The name of the indexed field containing the vector embeddings.
-        similarity (str): The type of similarity metric to use.
-        One of "euclidean", "cosine", or "dotProduct".
+        similarity (Optional[str]): The type of similarity metric to use.
+            One of "euclidean", "cosine", or "dotProduct". `None` if using auto-embeddings.
         filters (Optional[List[str]]): If provided, a list of fields to filter on
-        in addition to the vector search.
+            in addition to the vector search.
+        auto_embedding_model (Optional[str]): The name of the auto embedding model to use,
+            `None` if not using auto-embeddings.
         kwargs (Any): Keyword arguments supplying any additional options to the vector search index.
 
     Returns:
         A dictionary representing the vector search index definition.
     """
     # https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-type/
-    fields = [
-        {
-            "numDimensions": dimensions,
-            "path": path,
-            "similarity": similarity,
-            "type": "vector",
-            **(vector_index_options or {}),
-        },
-    ]
+    _check_param_config(
+        dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model
+    )
+
+    if auto_embedding_model is not None:
+        fields = [
+            {
+                "type": "autoEmbed",
+                "path": path,
+                "model": auto_embedding_model,
+                "modality": "text",
+                **(vector_index_options or {}),
+            },
+        ]
+    else:
+        fields = [
+            {
+                "numDimensions": dimensions,
+                "path": path,
+                "similarity": similarity,
+                "type": "vector",
+                **(vector_index_options or {}),
+            },
+        ]
     if filters:
         for field in filters:
             fields.append({"type": "filter", "path": field})
@@ -93,13 +126,14 @@ def wait_for_predicate(
 def create_vector_search_index(
     collection: Collection[Any],
     index_name: str,
-    dimensions: int,
     path: str,
-    similarity: str,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     *,
     wait_until_complete: float | None = None,
+    auto_embedding_model: str | None = None,
     **kwargs: Any,
 ) -> None:
     """Create a vector search index on the specified field.
@@ -107,19 +141,26 @@ def create_vector_search_index(
     Args:
         collection (Collection): MongoDB Collection
         index_name (str): Name of Index
-        dimensions (int): Number of dimensions in embedding
+        dimensions (int): Number of dimensions in embedding,
+            `None` if using auto-embeddings
         path (str): field with vector embedding
-        similarity (str): The similarity score used for the index
+        similarity (Optional[str]): The similarity score used for the index,
+            `None` if using auto-embeddings.
         filters (List[str]): Fields/paths to index to allow filtering in $vectorSearch
         wait_until_complete (Optional[float]): If provided, number of seconds to wait
             until search index is ready.
+        auto_embedding_model (Optional[str]): The name of the auto embedding model to use,
+            `None` if not using auto-embeddings.
         kwargs: Keyword arguments supplying any additional options to SearchIndexModel.
     """
     logger.info("Creating Search Index %s on %s", index_name, collection.name)
 
+    _check_param_config(
+        dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model
+    )
+
     if collection.name not in collection.database.list_collection_names():
         collection.database.create_collection(collection.name)
-
     result = collection.create_search_index(
         SearchIndexModel(
             definition=vector_search_index_definition(
@@ -128,6 +169,7 @@ def create_vector_search_index(
                 similarity=similarity,
                 filters=filters,
                 vector_index_options=vector_index_options,
+                auto_embedding_model=auto_embedding_model,
                 **kwargs,
             ),
             name=index_name,
@@ -147,13 +189,14 @@ def create_vector_search_index(
 def update_vector_search_index(
     collection: Collection[Any],
     index_name: str,
-    dimensions: int,
     path: str,
-    similarity: str,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     *,
     wait_until_complete: float | None = None,
+    auto_embedding_model: str | None = None,
     **kwargs: Any,
 ) -> None:
     """Update a search index.
@@ -163,15 +206,24 @@ def update_vector_search_index(
     Args:
         collection (Collection): MongoDB Collection
         index_name (str): Name of Index
-        dimensions (int): Number of dimensions in embedding
+        dimensions (int): Number of dimensions in embedding,
+            `None` if using auto-embeddings.
         path (str): field with vector embedding
-        similarity (str): The similarity score used for the index.
+        similarity (Optional[str]): The similarity score used for the index,
+            `None` if using auto-embeddings.
         filters (List[str]): Fields/paths to index to allow filtering in $vectorSearch
         wait_until_complete (Optional[float]): If provided, number of seconds to wait
             until search index is ready.
+        auto_embedding_model (Optional[str]): The name of the auto embedding model to use,
+            `None` if not using auto-embeddings.
         kwargs: Keyword arguments supplying any additional options to SearchIndexModel.
     """
     logger.info("Updating Search Index %s from Collection: %s", index_name, collection.name)
+
+    _check_param_config(
+        dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model
+    )
+
     collection.update_search_index(
         name=index_name,
         definition=vector_search_index_definition(
@@ -180,6 +232,7 @@ def update_vector_search_index(
             similarity=similarity,
             filters=filters,
             vector_index_options=vector_index_options,
+            auto_embedding_model=auto_embedding_model,
             **kwargs,
         ),
     )

@@ -16,6 +16,11 @@ DB_NAME = "pymongo_search_utils_test"
 COLLECTION_NAME = "test_operation"
 VECTOR_INDEX_NAME = "operation_vector_index"
 
+COMMUNITY_WITH_SEARCH = os.environ.get("COMMUNITY_WITH_SEARCH", "")
+require_community = pytest.mark.skipif(
+    COMMUNITY_WITH_SEARCH == "", reason="Only run in COMMUNITY_WITH_SEARCH is set"
+)
+
 
 @pytest.fixture(scope="module")
 def client():
@@ -280,6 +285,27 @@ class TestBulkEmbedAndInsertTexts:
         assert "vector" in doc
         assert doc["content"] == texts[0]
         assert doc["vector"] == [0.0, 0.0, 0.0]
+
+    @require_community
+    def test_autoembedding(self, collection: Collection, mock_embedding_func):
+        texts = ["text one"]
+        metadatas = [{}]
+
+        bulk_embed_and_insert_texts(
+            texts=texts,
+            metadatas=metadatas,
+            embedding_func=mock_embedding_func,
+            collection=collection,
+            text_key="content",
+            embedding_key="vector",
+            autoembedding=True,
+        )
+
+        doc = collection.find_one({})
+        assert doc is not None
+        assert "content" in doc
+        assert "vector" not in doc
+        assert doc["content"] == texts[0]
 
 
 class TestExecuteSearchQuery:

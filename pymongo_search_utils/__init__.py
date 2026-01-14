@@ -7,6 +7,7 @@ from .index import (
 )
 from .operation import bulk_embed_and_insert_texts
 from .pipeline import (
+    autoembedding_vector_search_stage,
     combine_pipelines,
     final_hybrid_stage,
     reciprocal_rank_stage,
@@ -23,6 +24,7 @@ __all__ = [
     "create_fulltext_search_index",
     "text_search_stage",
     "vector_search_stage",
+    "autoembedding_vector_search_stage",
     "combine_pipelines",
     "reciprocal_rank_stage",
     "final_hybrid_stage",
