@@ -27,9 +27,9 @@ def _check_param_config(
 
 
 def vector_search_index_definition(
-    dimensions: int | None,
     path: str,
-    similarity: str | None,
+    dimensions: int | None = None,
+    similarity: str | None = None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     auto_embedding_model: str | None = None,
@@ -189,9 +189,9 @@ def create_vector_search_index(
 def update_vector_search_index(
     collection: Collection[Any],
     index_name: str,
-    dimensions: int | None,
     path: str,
-    similarity: str | None,
+    dimensions: int | None = None,
+    similarity: str | None = None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     *,
