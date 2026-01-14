@@ -80,7 +80,6 @@ def vector_search_index_definition(
         for field in filters:
             fields.append({"type": "filter", "path": field})
     definition = {"fields": fields}
-    print(kwargs)
     definition.update(kwargs)
     return definition
 
@@ -157,7 +156,6 @@ def create_vector_search_index(
 
     if collection.name not in collection.database.list_collection_names():
         collection.database.create_collection(collection.name)
-    print(f"in create vector search index: {kwargs}")
     result = collection.create_search_index(
         SearchIndexModel(
             definition=vector_search_index_definition(
