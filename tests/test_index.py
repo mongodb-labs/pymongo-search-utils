@@ -201,7 +201,7 @@ def test_vector_search_index_definition() -> None:
 def test_vector_search_index_definition_for_autoembedding() -> None:
     # Test autoembedding config
     definition = vector_search_index_definition(
-        dimensions=-1, path="text", similarity=None, auto_embedding_model="voyage-4"
+        dimensions=None, path="text", similarity=None, auto_embedding_model="voyage-4"
     )
     assert "fields" in definition
     assert len(definition["fields"]) == 1
@@ -217,7 +217,7 @@ def test_vector_search_index_definition_for_autoembedding() -> None:
         )
     with pytest.raises(ValueError):
         vector_search_index_definition(
-            dimensions=-1,
+            dimensions=None,
             path="text",
             similarity=None,
         )
@@ -227,7 +227,7 @@ def test_vector_search_index_definition_for_autoembedding() -> None:
         )
     with pytest.raises(ValueError):
         vector_search_index_definition(
-            dimensions=-1,
+            dimensions=None,
             path="text",
             similarity="cosine",
         )

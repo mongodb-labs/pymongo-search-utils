@@ -22,7 +22,7 @@ def _check_param_config(
         raise ValueError(
             "if auto_embedding_model is set, then neither dimensions nor similarity may be set."
         )
-    if auto_embedding_model is None and (dimensions is not None or similarity is None):
+    if auto_embedding_model is None and (dimensions is None or similarity is None):
         raise ValueError("please specify dimensions and similarity.")
 
 
