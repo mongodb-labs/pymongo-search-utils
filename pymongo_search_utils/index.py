@@ -27,7 +27,7 @@ def _check_param_config(
 
 
 def vector_search_index_definition(
-    dimensions: int,
+    dimensions: int | None,
     path: str,
     similarity: str | None,
     filters: list[str] | None = None,
