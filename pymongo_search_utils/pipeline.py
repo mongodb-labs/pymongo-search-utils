@@ -111,7 +111,7 @@ def autoembedding_vector_search_stage(
         query: The plain text query
         search_field: Field in Collection containing text
         index_name: Name of Atlas Vector Search Index tied to Collection
-        model:s The query model name
+        model: The query model name
         top_k: Number of documents to return
         oversampling_factor: this times limit is the number of candidates
         filter: MQL match expression comparing an indexed field.
