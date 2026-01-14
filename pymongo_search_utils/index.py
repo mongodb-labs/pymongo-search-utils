@@ -28,8 +28,8 @@ def _check_param_config(
 
 def vector_search_index_definition(
     path: str,
-    dimensions: int | None = None,
-    similarity: str | None = None,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     auto_embedding_model: str | None = None,
@@ -38,7 +38,7 @@ def vector_search_index_definition(
     """Create a vector search index definition.
 
     Args:
-        dimensions (Optional[int]): The number of dimensions for vector embeddings,
+        dimensions (int): The number of dimensions for vector embeddings,
             `None` if using auto-embeddings.
         path (str): The name of the indexed field containing the vector embeddings.
         similarity (Optional[str]): The type of similarity metric to use.
@@ -127,8 +127,8 @@ def create_vector_search_index(
     collection: Collection[Any],
     index_name: str,
     path: str,
-    dimensions: int | None = None,
-    similarity: str | None = None,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     *,
@@ -141,11 +141,11 @@ def create_vector_search_index(
     Args:
         collection (Collection): MongoDB Collection
         index_name (str): Name of Index
-        dimensions (Optional[int]): Number of dimensions in embedding,
+        dimensions (int): Number of dimensions in embedding,
             `None` if using auto-embeddings
         path (str): field with vector embedding
         similarity (Optional[str]): The similarity score used for the index,
-            `None` if using auto-embeddings
+            `None` if using auto-embeddings.
         filters (List[str]): Fields/paths to index to allow filtering in $vectorSearch
         wait_until_complete (Optional[float]): If provided, number of seconds to wait
             until search index is ready.
@@ -190,8 +190,8 @@ def update_vector_search_index(
     collection: Collection[Any],
     index_name: str,
     path: str,
-    dimensions: int | None = None,
-    similarity: str | None = None,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict | None = None,
     *,
@@ -206,7 +206,7 @@ def update_vector_search_index(
     Args:
         collection (Collection): MongoDB Collection
         index_name (str): Name of Index
-        dimensions (Optional[int]): Number of dimensions in embedding,
+        dimensions (int): Number of dimensions in embedding,
             `None` if using auto-embeddings.
         path (str): field with vector embedding
         similarity (Optional[str]): The similarity score used for the index,
