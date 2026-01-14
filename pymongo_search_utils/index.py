@@ -14,15 +14,15 @@ logger = logging.getLogger(__file__)
 
 def _check_param_config(
     *,
-    dimensions: int | None,
+    dimensions: int,
     similarity: str | None,
     auto_embedding_model: str | None,
 ):
-    if auto_embedding_model is not None and (dimensions is not None or similarity is not None):
+    if auto_embedding_model is not None and (dimensions != -1 or similarity is not None):
         raise ValueError(
             "if auto_embedding_model is set, then neither dimensions nor similarity may be set."
         )
-    if auto_embedding_model is None and (dimensions is None or similarity is None):
+    if auto_embedding_model is None and (dimensions == -1 or similarity is None):
         raise ValueError("please specify dimensions and similarity.")
 
 
