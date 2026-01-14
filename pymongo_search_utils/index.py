@@ -18,7 +18,6 @@ def _check_param_config(
     similarity: str | None,
     auto_embedding_model: str | None,
 ):
-    print(dimensions, similarity, auto_embedding_model)
     if auto_embedding_model is not None and (dimensions != -1 or similarity is not None):
         raise ValueError(
             "if auto_embedding_model is set, then neither dimensions nor similarity may be set."
@@ -41,10 +40,12 @@ def vector_search_index_definition(
     Args:
         dimensions (int): The number of dimensions for vector embeddings.
         path (str): The name of the indexed field containing the vector embeddings.
-        similarity (str): The type of similarity metric to use.
-        One of "euclidean", "cosine", or "dotProduct".
+        similarity (Optional[str]): The type of similarity metric to use.
+        One of "euclidean", "cosine", or "dotProduct". `None` if using auto-embeddings.
         filters (Optional[List[str]]): If provided, a list of fields to filter on
         in addition to the vector search.
+        auto_embedding_model (Optional[str]): The name of the auto embedding model to use,
+        `None` if not using auto-embeddings.
         kwargs (Any): Keyword arguments supplying any additional options to the vector search index.
 
     Returns:

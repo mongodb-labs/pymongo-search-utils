@@ -55,8 +55,7 @@ def bulk_embed_and_insert_texts(
                 text_key: t,
                 **m,
             }
-            for i, t, m in
-            zip(ids, texts, metadatas, strict=False)
+            for i, t, m in zip(ids, texts, metadatas, strict=False)
         ]
     else:
         # Compute embedding vectors

@@ -21,6 +21,7 @@ require_community = pytest.mark.skipif(
     COMMUNITY_WITH_SEARCH == "", reason="Only run in COMMUNITY_WITH_SEARCH is set"
 )
 
+
 @pytest.fixture(scope="module")
 def client():
     conn_str = os.environ.get("MONGODB_URI", "mongodb://127.0.0.1:27017?directConnection=true")
@@ -297,7 +298,7 @@ class TestBulkEmbedAndInsertTexts:
             collection=collection,
             text_key="content",
             embedding_key="vector",
-            autoembedding=True
+            autoembedding=True,
         )
 
         doc = collection.find_one({})
