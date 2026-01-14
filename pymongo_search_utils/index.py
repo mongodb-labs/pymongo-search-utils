@@ -11,17 +11,21 @@ INTERVAL = 0.5
 
 logger = logging.getLogger(__file__)
 
+
 def _check_param_config(
     *,
-    dimensions: int = -1, # TODO: add default value here
+    dimensions: int,
     similarity: str | None,
-    auto_embedding_model: str | None = None
+    auto_embedding_model: str | None,
 ):
     print(dimensions, similarity, auto_embedding_model)
     if auto_embedding_model is not None and (dimensions != -1 or similarity is not None):
-        raise ValueError("if auto_embedding_model is set, then neither dimensions nor similarity may be set.")
+        raise ValueError(
+            "if auto_embedding_model is set, then neither dimensions nor similarity may be set."
+        )
     if auto_embedding_model is None and (dimensions == -1 or similarity is None):
         raise ValueError("please specify dimensions and similarity.")
+
 
 def vector_search_index_definition(
     dimensions: int,
@@ -47,7 +51,9 @@ def vector_search_index_definition(
         A dictionary representing the vector search index definition.
     """
     # https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-type/
-    _check_param_config(dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model)
+    _check_param_config(
+        dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model
+    )
 
     if auto_embedding_model is not None:
         fields = [
@@ -144,7 +150,9 @@ def create_vector_search_index(
     """
     logger.info("Creating Search Index %s on %s", index_name, collection.name)
 
-    _check_param_config(dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model)
+    _check_param_config(
+        dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model
+    )
 
     if collection.name not in collection.database.list_collection_names():
         collection.database.create_collection(collection.name)
@@ -204,7 +212,9 @@ def update_vector_search_index(
     """
     logger.info("Updating Search Index %s from Collection: %s", index_name, collection.name)
 
-    _check_param_config(dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model)
+    _check_param_config(
+        dimensions=dimensions, similarity=similarity, auto_embedding_model=auto_embedding_model
+    )
 
     collection.update_search_index(
         name=index_name,
