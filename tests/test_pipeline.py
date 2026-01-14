@@ -1,6 +1,7 @@
 """Tests for pipeline aggregation generator utilities."""
 
 from pymongo_search_utils.pipeline import (
+    autoembedding_vector_search_stage,
     combine_pipelines,
     final_hybrid_stage,
     reciprocal_rank_stage,
@@ -150,6 +151,25 @@ class TestVectorSearchStage:
                 "numCandidates": 120,
                 "limit": 15,
                 "filter": filter_dict,
+            }
+        }
+
+        assert result == expected
+
+    def test_basic_vector_search_autoembedding(self):
+        query = "Songs"
+        result = autoembedding_vector_search_stage(
+            query=query, search_field="text", index_name="vector_index", model="voyage-4"
+        )
+
+        expected = {
+            "$vectorSearch": {
+                "index": "vector_index",
+                "model": "voyage-4",
+                "path": "text",
+                "query": {"text": "Songs"},
+                "numCandidates": 40,
+                "limit": 4,
             }
         }
 
