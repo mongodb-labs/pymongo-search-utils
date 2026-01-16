@@ -14,10 +14,10 @@ logger = logging.getLogger(__file__)
 
 def _check_param_config(
     *,
-    dimensions: int,
+    dimensions: int | None,
     similarity: str | None,
     auto_embedding_model: str | None,
-):
+) -> None:
     if auto_embedding_model is not None and (dimensions != -1 or similarity is not None):
         raise ValueError(
             "if auto_embedding_model is set, then neither dimensions nor similarity may be set."
@@ -28,10 +28,10 @@ def _check_param_config(
 
 def vector_search_index_definition(
     path: str,
-    dimensions: int,
-    similarity: str | None,
+    dimensions: int | None = None,
+    similarity: str | None = None,
     filters: list[str] | None = None,
-    vector_index_options: dict | None = None,
+    vector_index_options: dict[str, Any] | None = None,
     auto_embedding_model: str | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
@@ -127,10 +127,10 @@ def create_vector_search_index(
     collection: Collection[Any],
     index_name: str,
     path: str,
-    dimensions: int,
-    similarity: str | None,
+    dimensions: int | None = None,
+    similarity: str | None = None,
     filters: list[str] | None = None,
-    vector_index_options: dict | None = None,
+    vector_index_options: dict[str, Any] | None = None,
     *,
     wait_until_complete: float | None = None,
     auto_embedding_model: str | None = None,
@@ -190,10 +190,10 @@ def update_vector_search_index(
     collection: Collection[Any],
     index_name: str,
     path: str,
-    dimensions: int,
-    similarity: str | None,
+    dimensions: int | None = None,
+    similarity: str | None = None,
     filters: list[str] | None = None,
-    vector_index_options: dict | None = None,
+    vector_index_options: dict[str, Any] | None = None,
     *,
     wait_until_complete: float | None = None,
     auto_embedding_model: str | None = None,
