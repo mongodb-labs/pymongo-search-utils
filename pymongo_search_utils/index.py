@@ -14,7 +14,7 @@ logger = logging.getLogger(__file__)
 
 def _check_param_config(
     *,
-    dimensions: int | None,
+    dimensions: int,
     similarity: str | None,
     auto_embedding_model: str | None,
 ) -> None:
@@ -28,8 +28,8 @@ def _check_param_config(
 
 def vector_search_index_definition(
     path: str,
-    dimensions: int | None = None,
-    similarity: str | None = None,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict[str, Any] | None = None,
     auto_embedding_model: str | None = None,
@@ -127,8 +127,8 @@ def create_vector_search_index(
     collection: Collection[Any],
     index_name: str,
     path: str,
-    dimensions: int | None = None,
-    similarity: str | None = None,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict[str, Any] | None = None,
     *,
@@ -190,8 +190,8 @@ def update_vector_search_index(
     collection: Collection[Any],
     index_name: str,
     path: str,
-    dimensions: int | None = None,
-    similarity: str | None = None,
+    dimensions: int,
+    similarity: str | None,
     filters: list[str] | None = None,
     vector_index_options: dict[str, Any] | None = None,
     *,
