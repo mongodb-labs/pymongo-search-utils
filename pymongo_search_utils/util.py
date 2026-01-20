@@ -47,7 +47,9 @@ def oid_to_str(oid: Any) -> str:
     return str(oid)
 
 
-def append_client_metadata(client: MongoClient | AsyncMongoClient, driver_info: DriverInfo) -> None:
+def append_client_metadata(
+    client: MongoClient[dict[str, Any]] | AsyncMongoClient[dict[str, Any]], driver_info: DriverInfo
+) -> None:
     # append_metadata was added in PyMongo 4.14.0, but is a valid database name on earlier versions
     if callable(client.append_metadata):
         client.append_metadata(driver_info)

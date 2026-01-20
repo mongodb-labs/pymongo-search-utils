@@ -13,7 +13,7 @@ from pymongo_search_utils.util import oid_to_str, str_to_oid
 
 def bulk_embed_and_insert_texts(
     texts: list[str] | Iterable[str],
-    metadatas: list[dict] | Generator[dict, Any, Any],
+    metadatas: list[dict[str, Any]] | Generator[dict[str, Any], Any, Any],
     embedding_func: Callable[[list[str]], list[list[float]]],
     collection: Collection[Any],
     text_key: str,
