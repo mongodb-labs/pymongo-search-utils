@@ -2,6 +2,10 @@
 
 ______________________________________________________________________
 
+## Changes in version 0.3.0 (2026/1/30)
+
+- Add utilities for MongoDB schema and LLM text to command parsing.
+
 ## Changes in version 0.2.1 (2026/1/14)
 
 - Add type support (`py.typed` file).
