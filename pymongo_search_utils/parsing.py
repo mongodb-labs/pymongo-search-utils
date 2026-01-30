@@ -36,8 +36,10 @@ def parse_command(command: str) -> Any:
     except Exception as e:
         raise ValueError(f"Could not extract aggregation pipeline: {e}") from e
 
+    # Make sure all keys are quoted
+    quoted_agg_str = re.sub(r'(?<!["\w])(\$?[a-zA-Z_][\w.$]*)(?=\s*:)', r'"\1"', agg_str)
     # Convert JavaScript-style constructs to Python syntax
-    agg_str = _convert_mongo_js_to_python(agg_str)
+    agg_str = _convert_mongo_js_to_python(quoted_agg_str)
 
     try:
         eval_globals = {
@@ -53,7 +55,7 @@ def parse_command(command: str) -> Any:
         raise ValueError(f"Failed to parse aggregation pipeline: {e}") from e
 
 
-def parse_doc(doc: dict[str, Any], prefix: str) -> list[str]:
+def parse_doc_schema(doc: dict[str, Any], prefix: str) -> list[str]:
     sub_schema = []
     for key, value in doc.items():
         if prefix:
@@ -61,12 +63,12 @@ def parse_doc(doc: dict[str, Any], prefix: str) -> list[str]:
         else:
             full_key = key
         if isinstance(value, dict):
-            sub_schema.extend(parse_doc(value, full_key))
+            sub_schema.extend(parse_doc_schema(value, full_key))
         elif isinstance(value, list):
             if not len(value):
                 sub_schema.append(f"{full_key}: Array")
             elif isinstance(value[0], dict):
-                sub_schema.extend(parse_doc(value[0], f"{full_key}[]"))
+                sub_schema.extend(parse_doc_schema(value[0], f"{full_key}[]"))
             else:
                 if type(value[0]) in _BSON_LOOKUP:
                     type_name = _BSON_LOOKUP[type(value[0])]
@@ -133,5 +135,4 @@ def _convert_mongo_js_to_python(code: str) -> str:
 
     for pattern, replacer in patterns:
         code = re.sub(pattern, replacer, code)
-
     return code
