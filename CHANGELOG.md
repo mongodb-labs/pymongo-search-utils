@@ -2,7 +2,7 @@
 
 ______________________________________________________________________
 
-## Changes in version 0.3.0 (2026/1/30)
+## Changes in version 0.3.0 (2026/2/2)
 
 - Add utilities for MongoDB schema and LLM text to command parsing.
 
