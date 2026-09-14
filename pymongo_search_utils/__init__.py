@@ -4,6 +4,7 @@ from .index import (
     create_vector_search_index,
     drop_vector_search_index,
     update_vector_search_index,
+    wait_for_fulltext_docs_in_index,
 )
 from .operation import bulk_embed_and_insert_texts
 from .pipeline import (
@@ -22,6 +23,7 @@ __all__ = [
     "drop_vector_search_index",
     "update_vector_search_index",
     "create_fulltext_search_index",
+    "wait_for_fulltext_docs_in_index",
     "text_search_stage",
     "vector_search_stage",
     "autoembedding_vector_search_stage",

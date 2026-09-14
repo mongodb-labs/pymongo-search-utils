@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from time import monotonic, sleep
 from typing import Any
 
@@ -317,107 +317,84 @@ def create_fulltext_search_index(
     logger.info(result)
 
 
-def _fulltext_index_path(index: Mapping[str, Any]) -> str:
-    """Return the single field path indexed by the given fulltext index definition.
-
-    Only an index with exactly one mapped, non-nested field has an unambiguous
-    field to wait on. Anything else raises, because guessing is not safe: the
-    wait counts documents for which the field exists, so picking a field that
-    only some documents carry would time out on a healthy index.
-    """
-    name = index["name"]
-    fields = index["latestDefinition"]["mappings"].get("fields") or {}
-    if len(fields) != 1:
-        raise ValueError(
-            f"Cannot infer which field to wait on for fulltext index {name}: "
-            f"it maps {len(fields)} fields. Pass path= to choose one."
-        )
-    field, mapping = next(iter(fields.items()))
-    mappings = mapping if isinstance(mapping, list) else [mapping]
-    if any(isinstance(m, Mapping) and m.get("type") == "document" for m in mappings):
-        raise ValueError(
-            f"Field {field!r} of fulltext index {name} is a nested document mapping, "
-            "which has no single path. Pass path= to choose one, e.g. "
-            f"path='{field}.<subfield>'."
-        )
-    return str(field)
-
-
 def wait_for_docs_in_index(
     collection: Collection[Any],
     index_name: str,
     n_docs: int,
-    *,
-    path: str | None = None,
-    timeout: float = TIMEOUT,
 ) -> bool:
     """Wait until the given number of documents are indexed by the given index.
+
+    Args:
+        collection (Collection): A MongoDB Collection.
+        index_name (str): The name of the index.
+        embedding_field (str): The name of the document field containing embeddings.
+        n_docs (int): The number of documents to expect in the index.
+    """
+    indexes = collection.list_search_indexes(index_name).to_list()
+    if len(indexes) == 0:
+        raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
+    index = indexes[0]
+    num_dimensions = index["latestDefinition"]["fields"][0]["numDimensions"]
+    field = index["latestDefinition"]["fields"][0]["path"]
+
+    query_vector = [0.001] * num_dimensions  # Dummy vector
+    query = [
+        {
+            "$vectorSearch": {
+                "index": index_name,
+                "path": field,
+                "queryVector": query_vector,
+                "numCandidates": n_docs,
+                "limit": n_docs,
+            }
+        },
+        {"$project": {"_id": 1, "search_score": {"$meta": "vectorSearchScore"}}},
+    ]
+    start = monotonic()
+    while monotonic() - start <= TIMEOUT:
+        if len(collection.aggregate(query).to_list()) == n_docs:
+            return True
+        else:
+            sleep(INTERVAL)
+    return False
+
+
+def wait_for_fulltext_docs_in_index(
+    collection: Collection[Any],
+    index_name: str,
+    path: str,
+    *,
+    n_docs: int | None = None,
+    timeout: float = TIMEOUT,
+) -> None:
+    """Wait until a fulltext index has indexed the expected number of documents.
 
     Creating an index and waiting for it to become READY does not wait for
     documents inserted afterwards to become searchable. Callers that query an
     index right after writing to it must wait for mongot to catch up, or they
     see a partial or empty result set.
 
-    Works for both vector search and fulltext indexes. Which one is in use is
-    determined from the index definition rather than from the ``type`` field,
-    because not every version of the server reports ``type``.
-
     Args:
         collection (Collection): A MongoDB Collection.
-        index_name (str): The name of the index.
-        n_docs (int): The number of documents to expect in the index.
-        path (Optional[str]): The indexed field to query. For a fulltext index
-            this may be omitted only when the index maps exactly one non-nested
-            field; otherwise there is no unambiguous field to wait on and a
-            ValueError is raised.
+        index_name (str): The name of the fulltext index.
+        path (str): The indexed field to query, e.g. "text" or "title.text".
+        n_docs (Optional[int]): The number of documents to expect in the index.
+            Defaults to the number of documents in the collection.
         timeout (float): Number of seconds to wait before giving up.
 
-    Returns:
-        True if the index reports n_docs within the timeout, False otherwise.
-
     Raises:
-        ValueError: If the index does not exist on the collection, or if path is
-            omitted for a fulltext index whose field cannot be inferred.
+        TimeoutError: If the index does not report n_docs within the timeout.
     """
-    indexes = collection.list_search_indexes(index_name).to_list()
-    if len(indexes) == 0:
-        raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
-    index = indexes[0]
-    definition = index["latestDefinition"]
-
-    if "mappings" in definition:
-        search_path = path or _fulltext_index_path(index)
-        fulltext_query: list[dict[str, Any]] = [
-            {"$search": {"index": index_name, "exists": {"path": search_path}}},
-            {"$count": "count"},
-        ]
-
-        def indexed() -> bool:
-            result = collection.aggregate(fulltext_query).to_list()
-            return bool(result) and result[0]["count"] == n_docs
-    else:
-        field = path or definition["fields"][0]["path"]
-        num_dimensions = definition["fields"][0]["numDimensions"]
-        query_vector = [0.001] * num_dimensions  # Dummy vector
-        vector_query: list[dict[str, Any]] = [
-            {
-                "$vectorSearch": {
-                    "index": index_name,
-                    "path": field,
-                    "queryVector": query_vector,
-                    "numCandidates": n_docs,
-                    "limit": n_docs,
-                }
-            },
-            {"$project": {"_id": 1, "search_score": {"$meta": "vectorSearchScore"}}},
-        ]
-
-        def indexed() -> bool:
-            return len(collection.aggregate(vector_query).to_list()) == n_docs
-
+    if n_docs is None:
+        n_docs = collection.count_documents({})
+    pipeline: list[dict[str, Any]] = [
+        {"$search": {"index": index_name, "exists": {"path": path}}},
+        {"$count": "count"},
+    ]
     start = monotonic()
     while monotonic() - start <= timeout:
-        if indexed():
-            return True
+        result = collection.aggregate(pipeline).to_list()
+        if result and result[0]["count"] == n_docs:
+            return
         sleep(INTERVAL)
-    return False
+    raise TimeoutError(f"Index {index_name} did not index {n_docs} documents in {timeout}s.")
