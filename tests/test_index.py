@@ -501,3 +501,223 @@ def test_wait_for_docs_in_index_nonexistent(
         # Should raise ValueError for non-existent index
         with pytest.raises(ValueError, match="does not exist"):
             wait_for_docs_in_index(collection, "nonexistent_index", 1)
+
+
+def test_drop_one_index_leaves_others(collection: Collection, mock_search_indexes: dict) -> None:
+    """Dropping one index must not wait for the collection to be empty of indexes.
+
+    Regression test for PYTHON-6095. The predicate used to be "this collection has
+    zero search indexes", so dropping one index from a collection that keeps another
+    burned the whole timeout and then raised, even though the drop had succeeded.
+    """
+
+    def mock_list_search_indexes(name=None):
+        if name:
+            return [mock_search_indexes[name]] if name in mock_search_indexes else []
+        return list(mock_search_indexes.values())
+
+    def mock_drop_search_index(name):
+        mock_search_indexes.pop(name, None)
+
+    mock_search_indexes[VECTOR_INDEX_NAME] = {"name": VECTOR_INDEX_NAME, "status": "READY"}
+    mock_search_indexes[FULLTEXT_INDEX_NAME] = {"name": FULLTEXT_INDEX_NAME, "status": "READY"}
+
+    with (
+        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
+        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
+    ):
+        # A short timeout so a regression fails fast instead of hanging the suite.
+        drop_vector_search_index(collection, FULLTEXT_INDEX_NAME, wait_until_complete=5)
+
+        remaining = [ix["name"] for ix in collection.list_search_indexes()]
+        assert remaining == [VECTOR_INDEX_NAME]
+
+
+def test_wait_for_docs_in_index_fulltext(collection: Collection, mock_search_indexes: dict) -> None:
+    """wait_for_docs_in_index supports fulltext indexes, not only vector indexes."""
+    index_name = FULLTEXT_INDEX_NAME
+    field = "text"
+    n_docs = 3
+    pipelines = []
+
+    class MockIndexCursor:
+        def __init__(self, data):
+            self.data = data
+
+        def __iter__(self):
+            return iter(self.data)
+
+        def to_list(self):
+            return self.data
+
+    def mock_list_search_indexes(name=None):
+        if name:
+            return MockIndexCursor(
+                [mock_search_indexes[name]] if name in mock_search_indexes else []
+            )
+        return list(mock_search_indexes.values())
+
+    def mock_aggregate(pipeline):
+        pipelines.append(pipeline)
+        return MockIndexCursor([{"count": n_docs}])
+
+    mock_search_indexes[index_name] = {
+        "name": index_name,
+        "status": "READY",
+        "latestDefinition": {
+            "mappings": {"dynamic": False, "fields": {field: [{"type": "string"}]}}
+        },
+    }
+
+    with (
+        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
+        patch.object(collection, "aggregate", side_effect=mock_aggregate),
+    ):
+        assert wait_for_docs_in_index(collection, index_name, n_docs, timeout=5) is True
+
+    # It must query the fulltext index, not run a $vectorSearch.
+    assert pipelines[0][0] == {"$search": {"index": index_name, "exists": {"path": field}}}
+
+
+def test_wait_for_docs_in_index_fulltext_times_out(
+    collection: Collection, mock_search_indexes: dict
+) -> None:
+    """A fulltext index that never reports the expected count returns False."""
+    index_name = FULLTEXT_INDEX_NAME
+
+    class MockIndexCursor:
+        def __init__(self, data):
+            self.data = data
+
+        def __iter__(self):
+            return iter(self.data)
+
+        def to_list(self):
+            return self.data
+
+    def mock_list_search_indexes(name=None):
+        if name:
+            return MockIndexCursor(
+                [mock_search_indexes[name]] if name in mock_search_indexes else []
+            )
+        return list(mock_search_indexes.values())
+
+    mock_search_indexes[index_name] = {
+        "name": index_name,
+        "status": "READY",
+        "latestDefinition": {
+            "mappings": {"dynamic": False, "fields": {"text": [{"type": "string"}]}}
+        },
+    }
+
+    with (
+        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
+        patch.object(collection, "aggregate", side_effect=lambda p: MockIndexCursor([])),
+    ):
+        assert wait_for_docs_in_index(collection, index_name, 3, timeout=1) is False
+
+
+def test_wait_for_docs_in_index_fulltext_ambiguous_path(
+    collection: Collection, mock_search_indexes: dict
+) -> None:
+    """A multi-field fulltext index has no single field to wait on, so it must not guess.
+
+    The wait counts documents for which the field exists. Picking one of several
+    mapped fields arbitrarily would time out whenever some documents lack it.
+    """
+    index_name = "fulltext_multi_index"
+
+    class MockIndexCursor:
+        def __init__(self, data):
+            self.data = data
+
+        def __iter__(self):
+            return iter(self.data)
+
+        def to_list(self):
+            return self.data
+
+    def mock_list_search_indexes(name=None):
+        if name:
+            return MockIndexCursor(
+                [mock_search_indexes[name]] if name in mock_search_indexes else []
+            )
+        return list(mock_search_indexes.values())
+
+    mock_search_indexes[index_name] = {
+        "name": index_name,
+        "status": "READY",
+        "latestDefinition": {
+            "mappings": {
+                "dynamic": False,
+                "fields": {
+                    "title": [{"type": "string"}],
+                    "description": [{"type": "string"}],
+                },
+            }
+        },
+    }
+
+    with patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes):
+        with pytest.raises(ValueError, match="maps 2 fields"):
+            wait_for_docs_in_index(collection, index_name, 3, timeout=1)
+
+        # An explicit path resolves the ambiguity.
+        with patch.object(
+            collection, "aggregate", side_effect=lambda p: MockIndexCursor([{"count": 3}])
+        ):
+            assert (
+                wait_for_docs_in_index(collection, index_name, 3, path="title", timeout=1) is True
+            )
+
+
+def test_wait_for_docs_in_index_fulltext_nested_path(
+    collection: Collection, mock_search_indexes: dict
+) -> None:
+    """A nested document mapping has no single path, so it must not guess either."""
+    index_name = "fulltext_nested_index"
+
+    class MockIndexCursor:
+        def __init__(self, data):
+            self.data = data
+
+        def __iter__(self):
+            return iter(self.data)
+
+        def to_list(self):
+            return self.data
+
+    def mock_list_search_indexes(name=None):
+        if name:
+            return MockIndexCursor(
+                [mock_search_indexes[name]] if name in mock_search_indexes else []
+            )
+        return list(mock_search_indexes.values())
+
+    mock_search_indexes[index_name] = {
+        "name": index_name,
+        "status": "READY",
+        "latestDefinition": {
+            "mappings": {
+                "dynamic": False,
+                "fields": {
+                    "title": {
+                        "type": "document",
+                        "fields": {"text": [{"type": "string"}]},
+                    }
+                },
+            }
+        },
+    }
+
+    with patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes):
+        with pytest.raises(ValueError, match="nested document mapping"):
+            wait_for_docs_in_index(collection, index_name, 3, timeout=1)
+
+        with patch.object(
+            collection, "aggregate", side_effect=lambda p: MockIndexCursor([{"count": 3}])
+        ):
+            assert (
+                wait_for_docs_in_index(collection, index_name, 3, path="title.text", timeout=1)
+                is True
+            )
