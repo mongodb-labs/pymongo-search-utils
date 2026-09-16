@@ -20,7 +20,8 @@ def _check_param_config(
 ) -> None:
     if auto_embedding_model is not None and (dimensions != -1 or similarity is not None):
         raise ValueError(
-            "if auto_embedding_model is set, then neither dimensions nor similarity may be set."
+            "if auto_embedding_model is set, then dimensions must be -1 "
+            "and similarity must be None."
         )
     if auto_embedding_model is None and (dimensions == -1 or similarity is None):
         raise ValueError("please specify dimensions and similarity.")
@@ -38,8 +39,8 @@ def vector_search_index_definition(
     """Create a vector search index definition.
 
     Args:
-        dimensions (int): The number of dimensions for vector embeddings,
-            `None` if using auto-embeddings.
+        dimensions (int): The number of dimensions for vector embeddings.
+            Pass -1 if using auto-embeddings.
         path (str): The name of the indexed field containing the vector embeddings.
         similarity (Optional[str]): The type of similarity metric to use.
             One of "euclidean", "cosine", or "dotProduct". `None` if using auto-embeddings.
@@ -141,8 +142,8 @@ def create_vector_search_index(
     Args:
         collection (Collection): MongoDB Collection
         index_name (str): Name of Index
-        dimensions (int): Number of dimensions in embedding,
-            `None` if using auto-embeddings
+        dimensions (int): Number of dimensions in embedding.
+            Pass -1 if using auto-embeddings.
         path (str): field with vector embedding
         similarity (Optional[str]): The similarity score used for the index,
             `None` if using auto-embeddings.
@@ -206,8 +207,8 @@ def update_vector_search_index(
     Args:
         collection (Collection): MongoDB Collection
         index_name (str): Name of Index
-        dimensions (int): Number of dimensions in embedding,
-            `None` if using auto-embeddings.
+        dimensions (int): Number of dimensions in embedding.
+            Pass -1 if using auto-embeddings.
         path (str): field with vector embedding
         similarity (Optional[str]): The similarity score used for the index,
             `None` if using auto-embeddings.
