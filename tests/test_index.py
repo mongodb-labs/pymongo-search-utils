@@ -505,12 +505,7 @@ def test_wait_for_docs_in_index_nonexistent(
 
 
 def test_drop_one_index_leaves_others(collection: Collection, mock_search_indexes: dict) -> None:
-    """Dropping one index must not wait for the collection to be empty of indexes.
-
-    Regression test for PYTHON-6095. The predicate used to be "this collection has
-    zero search indexes", so dropping one index from a collection that keeps another
-    burned the whole timeout and then raised, even though the drop had succeeded.
-    """
+    """Dropping one index must not wait for the collection to be empty of indexes."""
 
     def mock_list_search_indexes(name=None):
         if name:
