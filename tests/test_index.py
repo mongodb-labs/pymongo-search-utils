@@ -151,6 +151,7 @@ def test_wait_for_docs_in_index_nonexistent(
 def test_wait_for_fulltext_docs_in_index_raises_on_timeout(collection: Collection) -> None:
     """A timeout raises rather than returning a value a caller could ignore."""
     with pytest.raises(TimeoutError, match="did not index 99 documents"):
+        collection.insert_one({"foo": "bar"})
         wait_for_fulltext_docs_in_index(
             collection, FULLTEXT_INDEX_NAME, "text", n_docs=99, timeout=3
         )
