@@ -252,13 +252,13 @@ def drop_search_index(
     *,
     wait_until_complete: float | None = None,
 ) -> None:
-    """Drop an existing search index, vector or fulltext.
+    """Drop an existing search index - vector or fulltext.
 
     Args:
         collection (Collection): MongoDB Collection with index to be dropped.
         index_name (str): Name of the MongoDB index.
-        wait_until_complete (Optional[float]): If provided, number of seconds to wait
-            until the index is gone.
+        wait_until_complete (Optional[float]): If provided, the number of seconds to wait
+            until the index is dropped.
     """
     logger.info("Dropping Search Index %s from Collection: %s", index_name, collection.name)
     collection.drop_search_index(index_name)
@@ -279,7 +279,7 @@ def drop_vector_search_index(
     *,
     wait_until_complete: float | None = None,
 ) -> None:
-    """Drop an existing vector search index.
+    """Drop an existing search index - vector or fulltext.
 
     .. deprecated::
         Use :func:`drop_search_index` instead. This function never did anything
@@ -430,8 +430,11 @@ def wait_for_fulltext_docs_in_index(
     Raises:
         TimeoutError: If the index does not report n_docs within the timeout.
     """
+    all_docs = collection.count_documents({})
+    if n_docs == 0 or all_docs == 0:
+        return True
     if n_docs is None:
-        n_docs = collection.count_documents({})
+        n_docs = all_docs
     pipeline: list[dict[str, Any]] = [
         {"$search": {"index": index_name, "exists": {"path": path}}},
         {"$count": "count"},

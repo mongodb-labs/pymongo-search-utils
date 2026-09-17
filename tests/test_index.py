@@ -18,7 +18,7 @@ from pymongo_search_utils.index import (
     wait_for_predicate,
 )
 
-dbname = "pymongo_search_utils_test"
+DBNAME = "pymongo_search_utils_test"
 COLLECTION_NAME = "test_index"
 VECTOR_INDEX_NAME = "vector_index"
 FULLTEXT_INDEX_NAME = "fulltext_index"
@@ -30,11 +30,11 @@ DIMENSIONS = 10
 
 
 @pytest.fixture(scope="module")
-def collection(client: MongoClient, dbname: str) -> Generator:
-    if COLLECTION_NAME not in client[dbname].list_collection_names():
-        clxn = client[dbname].create_collection(COLLECTION_NAME)
+def collection(client: MongoClient, DBNAME: str) -> Generator:
+    if COLLECTION_NAME not in client[DBNAME].list_collection_names():
+        clxn = client[DBNAME].create_collection(COLLECTION_NAME)
     else:
-        clxn = client[dbname][COLLECTION_NAME]
+        clxn = client[DBNAME][COLLECTION_NAME]
     clxn.delete_many({})
     yield clxn
     clxn.delete_many({})
@@ -249,3 +249,22 @@ def test_indexes(collection: Collection, requires_search) -> None:
     # Drop an index and verify one remains
     drop_search_index(collection, VECTOR_INDEX_NAME, wait_until_complete=5)
     assert [i["name"] for i in collection.list_search_indexes()] == [FULLTEXT_INDEX_NAME]
+
+
+def test_wait_for_fulltext_docs_in_index_on_empty_collection(client) -> None:
+    db = client[DBNAME]
+    if "empty" not in db.list_collection_names():
+        empty_clxn = db.create_collection("empty")
+    else:
+        empty_clxn = db["empty"]
+
+    # Create fulltext search index
+    create_fulltext_search_index(
+        collection=empty_clxn,
+        index_name=FULLTEXT_INDEX_NAME,
+        field=FULLTEXT_FIELDS,
+        wait_until_complete=TIMEOUT,
+    )
+
+    # Wait for documents to be indexed
+    assert wait_for_fulltext_docs_in_index(empty_clxn, FULLTEXT_INDEX_NAME, "page_content")
