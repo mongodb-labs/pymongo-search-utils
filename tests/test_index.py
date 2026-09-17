@@ -30,7 +30,7 @@ DIMENSIONS = 10
 
 
 @pytest.fixture(scope="module")
-def collection(client: MongoClient, DBNAME: str) -> Generator:
+def collection(client: MongoClient) -> Generator:
     if COLLECTION_NAME not in client[DBNAME].list_collection_names():
         clxn = client[DBNAME].create_collection(COLLECTION_NAME)
     else:
@@ -252,6 +252,7 @@ def test_indexes(collection: Collection, requires_search) -> None:
 
 
 def test_wait_for_fulltext_docs_in_index_on_empty_collection(client) -> None:
+    """Test case when collection has 0 documents."""
     db = client[DBNAME]
     if "empty" not in db.list_collection_names():
         empty_clxn = db.create_collection("empty")
@@ -265,6 +266,5 @@ def test_wait_for_fulltext_docs_in_index_on_empty_collection(client) -> None:
         field=FULLTEXT_FIELDS,
         wait_until_complete=TIMEOUT,
     )
-
     # Wait for documents to be indexed
     assert wait_for_fulltext_docs_in_index(empty_clxn, FULLTEXT_INDEX_NAME, "page_content")
