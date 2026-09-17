@@ -217,15 +217,17 @@ def test_indexes(collection: Collection, requires_search) -> None:
 
     # Verify index values
     for idx in indexes:
-        if idx["name"] == FULLTEXT_INDEX_NAME:
-            assert idx["type"] == "search"
-            assert idx["latestDefinition"]["mappings"]["dynamic"] is False
-            assert set(idx["latestDefinition"]["mappings"]["fields"]) == set(FULLTEXT_FIELDS)
-        elif idx["name"] == VECTOR_INDEX_NAME:
+        if idx["name"] == VECTOR_INDEX_NAME:
             assert idx["latestDefinition"]["fields"][0]["type"] == "vector"
             assert idx["latestDefinition"]["fields"][0]["path"] == "embedding"
             assert idx["latestDefinition"]["fields"][0]["similarity"] == "cosine"
             assert idx["latestDefinition"]["fields"][0]["numDimensions"] == DIMENSIONS
+        elif idx["name"] == FULLTEXT_INDEX_NAME:
+            # Community mongot omits `type` from $listSearchIndexes; "search" is
+            # the default when it is absent.
+            assert idx.get("type", "search") == "search"
+            assert idx["latestDefinition"]["mappings"]["dynamic"] is False
+            assert set(idx["latestDefinition"]["mappings"]["fields"]) == set(FULLTEXT_FIELDS)
         else:
             raise AssertionError(f"Unexpected index name: {idx['name']}")
 
