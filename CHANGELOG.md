@@ -9,6 +9,8 @@ ______________________________________________________________________
 - Fix `drop_vector_search_index`. It was waiting for the collection to hold zero search
   indexes rather than for the named index to be gone. It previously timed out on any
   collection that keeps another index.
+- Rename `drop_vector_search_index` to `drop_search_index`. It drops any search index by
+  name and never did anything vector-specific. The old name remains as a deprecated alias.
 
 ## Changes in version 0.3.0 (2026/2/3)
 

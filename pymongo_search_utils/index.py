@@ -1,4 +1,5 @@
 import logging
+import warnings
 from collections.abc import Callable
 from time import monotonic, sleep
 from typing import Any
@@ -245,19 +246,19 @@ def update_vector_search_index(
     logger.info("Update succeeded")
 
 
-def drop_vector_search_index(
+def drop_search_index(
     collection: Collection[Any],
     index_name: str,
     *,
     wait_until_complete: float | None = None,
 ) -> None:
-    """Drop an existing vector search index.
+    """Drop an existing search index, vector or fulltext.
 
     Args:
         collection (Collection): MongoDB Collection with index to be dropped.
         index_name (str): Name of the MongoDB index.
         wait_until_complete (Optional[float]): If provided, number of seconds to wait
-            until search index is ready.
+            until the index is gone.
     """
     logger.info("Dropping Search Index %s from Collection: %s", index_name, collection.name)
     collection.drop_search_index(index_name)
@@ -269,7 +270,28 @@ def drop_vector_search_index(
             err=f"Index {index_name} did not drop in {wait_until_complete}!",
             timeout=wait_until_complete,
         )
-    logger.info("Vector Search index %s.%s dropped", collection.name, index_name)
+    logger.info("Search index %s.%s dropped", collection.name, index_name)
+
+
+def drop_vector_search_index(
+    collection: Collection[Any],
+    index_name: str,
+    *,
+    wait_until_complete: float | None = None,
+) -> None:
+    """Drop an existing vector search index.
+
+    .. deprecated::
+        Use :func:`drop_search_index` instead. This function never did anything
+        vector-specific: it drops any search index by name.
+    """
+    warnings.warn(
+        "drop_vector_search_index is deprecated; use drop_search_index instead. "
+        "It drops any search index, not only vector ones.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    drop_search_index(collection, index_name, wait_until_complete=wait_until_complete)
 
 
 def create_fulltext_search_index(

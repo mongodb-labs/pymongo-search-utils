@@ -2,6 +2,7 @@ from ._version import __version__
 from .index import (
     create_fulltext_search_index,
     create_vector_search_index,
+    drop_search_index,
     drop_vector_search_index,
     update_vector_search_index,
     wait_for_fulltext_docs_in_index,
@@ -20,6 +21,7 @@ from .util import append_client_metadata
 __all__ = [
     "__version__",
     "create_vector_search_index",
+    "drop_search_index",
     "drop_vector_search_index",
     "update_vector_search_index",
     "create_fulltext_search_index",
