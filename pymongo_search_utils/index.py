@@ -2,7 +2,7 @@ import logging
 import warnings
 from collections.abc import Callable
 from time import monotonic, sleep
-from typing import Any
+from typing import Any, Literal
 
 from pymongo.operations import SearchIndexModel
 from pymongo.synchronous.collection import Collection
@@ -343,21 +343,42 @@ def wait_for_docs_in_index(
     collection: Collection[Any],
     index_name: str,
     n_docs: int,
-) -> bool:
-    """Wait until the given number of documents are indexed by the given index.
+) -> Literal[True]:
+    """Wait until a vector search index has indexed the expected number of documents.
+
+    Creating an index and waiting for it to become READY does not wait for
+    documents inserted afterwards to become searchable. Callers that query an
+    index right after writing to it must wait for mongot to catch up, or they
+    see a partial or empty result set.
 
     Args:
         collection (Collection): A MongoDB Collection.
-        index_name (str): The name of the index.
-        embedding_field (str): The name of the document field containing embeddings.
+        index_name (str): The name of the vector search index.
         n_docs (int): The number of documents to expect in the index.
+
+    Returns:
+        True, once the index reports n_docs documents.
+
+    Raises:
+        ValueError: If the index does not exist, or is not a vector search index.
+        TimeoutError: If the index does not report n_docs within TIMEOUT seconds.
     """
-    indexes = collection.list_search_indexes(index_name).to_list()
-    if len(indexes) == 0:
+    index = collection.list_search_indexes(index_name).try_next()
+    if index is None:
         raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
-    index = indexes[0]
-    num_dimensions = index["latestDefinition"]["fields"][0]["numDimensions"]
-    field = index["latestDefinition"]["fields"][0]["path"]
+
+    # A vector search index defines an array of fields, only one of which is the
+    # vector. Filter fields may be declared before it, so select by type rather
+    # than taking fields[0]. A fulltext index has "mappings" and no "fields".
+    fields = index["latestDefinition"].get("fields", [])
+    vector_fields = [f for f in fields if f.get("type") == "vector"]
+    if not vector_fields:
+        raise ValueError(
+            f"Index {index_name} is not a vector search index with an explicit vector field. "
+            "Use wait_for_fulltext_docs_in_index for fulltext indexes."
+        )
+    field = vector_fields[0]["path"]
+    num_dimensions = vector_fields[0]["numDimensions"]
 
     query_vector = [0.001] * num_dimensions  # Dummy vector
     query = [
@@ -376,9 +397,8 @@ def wait_for_docs_in_index(
     while monotonic() - start <= TIMEOUT:
         if len(collection.aggregate(query).to_list()) == n_docs:
             return True
-        else:
-            sleep(INTERVAL)
-    return False
+        sleep(INTERVAL)
+    raise TimeoutError(f"Index {index_name} did not index {n_docs} documents in {TIMEOUT}s.")
 
 
 def wait_for_fulltext_docs_in_index(
@@ -388,7 +408,7 @@ def wait_for_fulltext_docs_in_index(
     *,
     n_docs: int | None = None,
     timeout: float = TIMEOUT,
-) -> None:
+) -> Literal[True]:
     """Wait until a fulltext index has indexed the expected number of documents.
 
     Creating an index and waiting for it to become READY does not wait for
@@ -404,6 +424,9 @@ def wait_for_fulltext_docs_in_index(
             Defaults to the number of documents in the collection.
         timeout (float): Number of seconds to wait before giving up.
 
+    Returns:
+        True, once the index reports n_docs documents.
+
     Raises:
         TimeoutError: If the index does not report n_docs within the timeout.
     """
@@ -417,6 +440,6 @@ def wait_for_fulltext_docs_in_index(
     while monotonic() - start <= timeout:
         result = collection.aggregate(pipeline).to_list()
         if result and result[0]["count"] == n_docs:
-            return
+            return True
         sleep(INTERVAL)
     raise TimeoutError(f"Index {index_name} did not index {n_docs} documents in {timeout}s.")

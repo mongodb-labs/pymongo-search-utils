@@ -1,8 +1,7 @@
 """Tests for index operation utilities."""
 
-import os
+import time
 from collections.abc import Generator
-from unittest.mock import MagicMock, patch
 
 import pytest
 from pymongo import MongoClient
@@ -11,151 +10,34 @@ from pymongo.collection import Collection
 from pymongo_search_utils.index import (
     create_fulltext_search_index,
     create_vector_search_index,
-    drop_vector_search_index,
+    drop_search_index,
     is_index_ready,
-    update_vector_search_index,
     vector_search_index_definition,
     wait_for_docs_in_index,
     wait_for_fulltext_docs_in_index,
     wait_for_predicate,
 )
 
-DB_NAME = "pymongo_search_utils_test"
+dbname = "pymongo_search_utils_test"
 COLLECTION_NAME = "test_index"
 VECTOR_INDEX_NAME = "vector_index"
 FULLTEXT_INDEX_NAME = "fulltext_index"
+# A list exercises the field: str | list[str] branch of create_fulltext_search_index.
+FULLTEXT_FIELDS = ["page_content", "title"]
 
-TIMEOUT = 120
+TIMEOUT = 120  # TODO - This is a bitter pill to swallow
 DIMENSIONS = 10
-
-COMMUNITY_WITH_SEARCH = os.environ.get("COMMUNITY_WITH_SEARCH", "")
-require_community = pytest.mark.skipif(
-    COMMUNITY_WITH_SEARCH == "", reason="Only run in COMMUNITY_WITH_SEARCH is set"
-)
 
 
 @pytest.fixture(scope="module")
-def client() -> Generator[MongoClient, None, None]:
-    conn_str = os.environ.get("MONGODB_URI", "mongodb://127.0.0.1:27017?directConnection=true")
-    client = MongoClient(conn_str)
-    yield client
-    client.close()
-
-
-@pytest.fixture
-def collection(client) -> Generator:
-    if COLLECTION_NAME not in client[DB_NAME].list_collection_names():
-        clxn = client[DB_NAME].create_collection(COLLECTION_NAME)
+def collection(client: MongoClient, dbname: str) -> Generator:
+    if COLLECTION_NAME not in client[dbname].list_collection_names():
+        clxn = client[dbname].create_collection(COLLECTION_NAME)
     else:
-        clxn = client[DB_NAME][COLLECTION_NAME]
+        clxn = client[dbname][COLLECTION_NAME]
     clxn.delete_many({})
     yield clxn
     clxn.delete_many({})
-
-
-@pytest.fixture
-def mock_search_indexes():
-    """Fixture to track mock search indexes."""
-    return {}
-
-
-def test_search_index_create_and_drop(collection: Collection, mock_search_indexes: dict) -> None:
-    index_name = VECTOR_INDEX_NAME
-    dimensions = DIMENSIONS
-    path = "embedding"
-    similarity = "cosine"
-    filters: list[str] | None = None
-    wait_until_complete = TIMEOUT
-
-    def mock_list_search_indexes(name=None):
-        if name:
-            return [mock_search_indexes[name]] if name in mock_search_indexes else []
-        return list(mock_search_indexes.values())
-
-    def mock_create_search_index(model):
-        doc = model.document
-        mock_search_indexes[doc["name"]] = {
-            "name": doc["name"],
-            "status": "READY",
-            "type": doc.get("type", "search"),
-            "latestDefinition": doc["definition"],
-        }
-        return doc["name"]
-
-    def mock_drop_search_index(name):
-        if name in mock_search_indexes:
-            del mock_search_indexes[name]
-
-    with (
-        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
-        patch.object(collection, "create_search_index", side_effect=mock_create_search_index),
-        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
-    ):
-        for index_info in collection.list_search_indexes():
-            drop_vector_search_index(
-                collection, index_info["name"], wait_until_complete=wait_until_complete
-            )
-
-        assert len(list(collection.list_search_indexes())) == 0
-
-        create_vector_search_index(
-            collection=collection,
-            index_name=index_name,
-            dimensions=dimensions,
-            path=path,
-            similarity=similarity,
-            filters=filters,
-            wait_until_complete=wait_until_complete,
-        )
-
-        assert is_index_ready(collection, index_name)
-        indexes = list(collection.list_search_indexes())
-        assert len(indexes) == 1
-        assert indexes[0]["name"] == index_name
-
-        drop_vector_search_index(collection, index_name, wait_until_complete=wait_until_complete)
-
-        indexes = list(collection.list_search_indexes())
-        assert len(indexes) == 0
-
-
-@pytest.mark.skip(
-    "collection.update_vector_search_index requires [https://jira.mongodb.org/browse/DRIVERS-3078]"
-)
-def test_search_index_update_vector_search_index(collection: Collection) -> None:
-    index_name = "INDEX_TO_UPDATE"
-    similarity_orig = "cosine"
-    similarity_new = "euclidean"
-
-    create_vector_search_index(
-        collection=collection,
-        index_name=index_name,
-        dimensions=DIMENSIONS,
-        path="embedding",
-        similarity=similarity_orig,
-        wait_until_complete=TIMEOUT,
-    )
-
-    assert is_index_ready(collection, index_name)
-    indexes = list(collection.list_search_indexes())
-    assert len(indexes) == 1
-    assert indexes[0]["name"] == index_name
-    assert indexes[0]["latestDefinition"]["fields"][0]["similarity"] == similarity_orig
-
-    update_vector_search_index(
-        collection=collection,
-        index_name=index_name,
-        dimensions=DIMENSIONS,
-        path="embedding",
-        similarity=similarity_new,
-        wait_until_complete=TIMEOUT,
-    )
-
-    assert is_index_ready(collection, index_name)
-    indexes = list(collection.list_search_indexes())
-    assert len(indexes) == 1
-    assert indexes[0]["name"] == index_name
-    assert indexes[0]["latestDefinition"]["fields"][0]["similarity"] == similarity_new
 
 
 def test_vector_search_index_definition() -> None:
@@ -198,9 +80,8 @@ def test_vector_search_index_definition() -> None:
     assert definition["storedSource"] is True
 
 
-@require_community
 def test_vector_search_index_definition_for_autoembedding() -> None:
-    # Test autoembedding config
+    """Test autoembedding config."""
     definition = vector_search_index_definition(
         dimensions=-1, path="text", similarity=None, auto_embedding_model="voyage-4"
     )
@@ -236,8 +117,6 @@ def test_vector_search_index_definition_for_autoembedding() -> None:
 
 def test_wait_for_predicate() -> None:
     """Test the wait_for_predicate utility function."""
-    import time
-
     # Test successful predicate
     counter = {"value": 0}
 
@@ -259,325 +138,112 @@ def test_wait_for_predicate() -> None:
         wait_for_predicate(always_false, "Predicate failed", timeout=0.5, interval=0.1)
 
 
-def test_create_fulltext_search_index_single_field(
-    collection: Collection, mock_search_indexes: dict
-) -> None:
-    """Test creating a fulltext search index on a single field."""
-    index_name = FULLTEXT_INDEX_NAME
-    field = "description"
-    wait_until_complete = TIMEOUT
-
-    def mock_list_search_indexes(name=None):
-        if name:
-            return [mock_search_indexes[name]] if name in mock_search_indexes else []
-        return list(mock_search_indexes.values())
-
-    def mock_create_search_index(model):
-        doc = model.document
-        mock_search_indexes[doc["name"]] = {
-            "name": doc["name"],
-            "status": "READY",
-            "type": doc.get("type", "search"),
-            "latestDefinition": doc["definition"],
-        }
-        return doc["name"]
-
-    def mock_drop_search_index(name):
-        if name in mock_search_indexes:
-            del mock_search_indexes[name]
-
-    with (
-        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
-        patch.object(collection, "create_search_index", side_effect=mock_create_search_index),
-        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
-    ):
-        # Clean up existing indexes
-        for index_info in collection.list_search_indexes():
-            drop_vector_search_index(
-                collection, index_info["name"], wait_until_complete=wait_until_complete
-            )
-
-        # Create fulltext search index
-        create_fulltext_search_index(
-            collection=collection,
-            index_name=index_name,
-            field=field,
-            wait_until_complete=wait_until_complete,
-        )
-
-        # Verify index was created
-        assert is_index_ready(collection, index_name)
-        indexes = list(collection.list_search_indexes())
-        assert len(indexes) == 1
-        assert indexes[0]["name"] == index_name
-        assert indexes[0]["type"] == "search"
-        assert indexes[0]["latestDefinition"]["mappings"]["dynamic"] is False
-        assert field in indexes[0]["latestDefinition"]["mappings"]["fields"]
-
-        # Clean up
-        drop_vector_search_index(collection, index_name, wait_until_complete=wait_until_complete)
-
-
-def test_create_fulltext_search_index_multiple_fields(
-    collection: Collection, mock_search_indexes: dict
-) -> None:
-    """Test creating a fulltext search index on multiple fields."""
-    index_name = "fulltext_multi_index"
-    fields = ["title", "description", "content"]
-    wait_until_complete = TIMEOUT
-
-    def mock_list_search_indexes(name=None):
-        if name:
-            return [mock_search_indexes[name]] if name in mock_search_indexes else []
-        return list(mock_search_indexes.values())
-
-    def mock_create_search_index(model):
-        doc = model.document
-        mock_search_indexes[doc["name"]] = {
-            "name": doc["name"],
-            "status": "READY",
-            "type": doc.get("type", "search"),
-            "latestDefinition": doc["definition"],
-        }
-        return doc["name"]
-
-    def mock_drop_search_index(name):
-        if name in mock_search_indexes:
-            del mock_search_indexes[name]
-
-    with (
-        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
-        patch.object(collection, "create_search_index", side_effect=mock_create_search_index),
-        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
-    ):
-        # Clean up existing indexes
-        for index_info in collection.list_search_indexes():
-            drop_vector_search_index(
-                collection, index_info["name"], wait_until_complete=wait_until_complete
-            )
-
-        # Create fulltext search index with multiple fields
-        create_fulltext_search_index(
-            collection=collection,
-            index_name=index_name,
-            field=fields,
-            wait_until_complete=wait_until_complete,
-        )
-
-        # Verify index was created
-        assert is_index_ready(collection, index_name)
-        indexes = list(collection.list_search_indexes())
-        assert len(indexes) == 1
-        assert indexes[0]["name"] == index_name
-        assert indexes[0]["type"] == "search"
-
-        # Verify all fields are in the index
-        index_fields = indexes[0]["latestDefinition"]["mappings"]["fields"]
-        for field in fields:
-            assert field in index_fields
-            assert index_fields[field] == [{"type": "string"}]
-
-        # Clean up
-        drop_vector_search_index(collection, index_name, wait_until_complete=wait_until_complete)
-
-
-def test_wait_for_docs_in_index(collection: Collection, mock_search_indexes: dict) -> None:
-    """Test waiting for documents to be indexed in a vector search index."""
-    index_name = "wait_docs_index"
-    dimensions = DIMENSIONS
-    path = "embedding"
-    similarity = "cosine"
-    wait_until_complete = TIMEOUT
-
-    def mock_list_search_indexes(name=None):
-        if name:
-            result = [mock_search_indexes[name]] if name in mock_search_indexes else []
-
-            # When called with a name parameter (e.g., for is_index_ready), return an iterable
-            # When called with a name parameter for wait_for_docs_in_index, return a mock cursor
-            # We need to check the context - if it has to_list, it's for wait_for_docs_in_index
-            class MockIndexCursor:
-                def __init__(self, data):
-                    self.data = data
-
-                def __iter__(self):
-                    return iter(self.data)
-
-                def to_list(self):
-                    return self.data
-
-            return MockIndexCursor(result)
-        return list(mock_search_indexes.values())
-
-    def mock_create_search_index(model):
-        doc = model.document
-        mock_search_indexes[doc["name"]] = {
-            "name": doc["name"],
-            "status": "READY",
-            "type": doc.get("type", "search"),
-            "latestDefinition": doc["definition"],
-        }
-        return doc["name"]
-
-    def mock_drop_search_index(name):
-        if name in mock_search_indexes:
-            del mock_search_indexes[name]
-
-    # Insert test documents with embeddings
-    n_docs = 5
-    docs = [{"_id": i, path: [0.1] * dimensions, "text": f"doc {i}"} for i in range(n_docs)]
-    collection.insert_many(docs)
-
-    def mock_aggregate(pipeline):
-        # Return mock results for vector search aggregation
-        mock_cursor = MagicMock()
-        mock_cursor.to_list.return_value = [{"_id": i, "search_score": 0.9} for i in range(n_docs)]
-        return mock_cursor
-
-    with (
-        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
-        patch.object(collection, "create_search_index", side_effect=mock_create_search_index),
-        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
-        patch.object(collection, "aggregate", side_effect=mock_aggregate),
-    ):
-        # Clean up existing indexes
-        for index_info in list(mock_search_indexes.values()):
-            drop_vector_search_index(
-                collection, index_info["name"], wait_until_complete=wait_until_complete
-            )
-
-        # Create vector search index
-        create_vector_search_index(
-            collection=collection,
-            index_name=index_name,
-            dimensions=dimensions,
-            path=path,
-            similarity=similarity,
-            wait_until_complete=wait_until_complete,
-        )
-
-        # Wait for documents to be indexed
-        result = wait_for_docs_in_index(collection, index_name, n_docs)
-        assert result is True
-
-        # Clean up
-        drop_vector_search_index(collection, index_name, wait_until_complete=wait_until_complete)
-
-
 def test_wait_for_docs_in_index_nonexistent(
-    collection: Collection, mock_search_indexes: dict
+    collection: Collection,
 ) -> None:
     """Test wait_for_docs_in_index raises error for non-existent index."""
 
-    def mock_list_search_indexes(name=None):
-        if name:
-            result = [mock_search_indexes[name]] if name in mock_search_indexes else []
-
-            # Return a mock cursor with to_list method
-            class MockIndexCursor:
-                def __init__(self, data):
-                    self.data = data
-
-                def __iter__(self):
-                    return iter(self.data)
-
-                def to_list(self):
-                    return self.data
-
-            return MockIndexCursor(result)
-        return list(mock_search_indexes.values())
-
-    def mock_drop_search_index(name):
-        if name in mock_search_indexes:
-            del mock_search_indexes[name]
-
-    with (
-        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
-        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
-    ):
-        # Ensure no indexes exist
-        for index_info in list(mock_search_indexes.values()):
-            drop_vector_search_index(collection, index_info["name"], wait_until_complete=TIMEOUT)
-
-        # Should raise ValueError for non-existent index
-        with pytest.raises(ValueError, match="does not exist"):
-            wait_for_docs_in_index(collection, "nonexistent_index", 1)
-
-
-def test_drop_one_index_leaves_others(collection: Collection, mock_search_indexes: dict) -> None:
-    """Dropping one index must not wait for the collection to be empty of indexes."""
-
-    def mock_list_search_indexes(name=None):
-        if name:
-            return [mock_search_indexes[name]] if name in mock_search_indexes else []
-        return list(mock_search_indexes.values())
-
-    def mock_drop_search_index(name):
-        mock_search_indexes.pop(name, None)
-
-    mock_search_indexes[VECTOR_INDEX_NAME] = {"name": VECTOR_INDEX_NAME, "status": "READY"}
-    mock_search_indexes[FULLTEXT_INDEX_NAME] = {"name": FULLTEXT_INDEX_NAME, "status": "READY"}
-
-    with (
-        patch.object(collection, "list_search_indexes", side_effect=mock_list_search_indexes),
-        patch.object(collection, "drop_search_index", side_effect=mock_drop_search_index),
-    ):
-        # A short timeout so a regression fails fast instead of hanging the suite.
-        drop_vector_search_index(collection, FULLTEXT_INDEX_NAME, wait_until_complete=5)
-
-        remaining = [ix["name"] for ix in collection.list_search_indexes()]
-        assert remaining == [VECTOR_INDEX_NAME]
-
-
-class MockAggregateCursor:
-    """Stands in for the cursor returned by Collection.aggregate."""
-
-    def __init__(self, data):
-        self.data = data
-
-    def __iter__(self):
-        return iter(self.data)
-
-    def to_list(self):
-        return self.data
-
-
-def test_wait_for_fulltext_docs_in_index(collection: Collection) -> None:
-    """The wait returns once the index reports the expected document count."""
-    n_docs = 3
-    collection.insert_many([{"text": f"doc {i}"} for i in range(n_docs)])
-    pipelines = []
-
-    def mock_aggregate(pipeline):
-        pipelines.append(pipeline)
-        return MockAggregateCursor([{"count": n_docs}])
-
-    with patch.object(collection, "aggregate", side_effect=mock_aggregate):
-        # n_docs defaults to the number of documents in the collection.
-        wait_for_fulltext_docs_in_index(collection, FULLTEXT_INDEX_NAME, "text", timeout=5)
-
-    assert pipelines[0] == [
-        {"$search": {"index": FULLTEXT_INDEX_NAME, "exists": {"path": "text"}}},
-        {"$count": "count"},
-    ]
-
-
-def test_wait_for_fulltext_docs_in_index_explicit_n_docs(collection: Collection) -> None:
-    """An explicit n_docs overrides the collection count."""
-    collection.insert_many([{"text": f"doc {i}"} for i in range(5)])
-
-    with patch.object(
-        collection, "aggregate", side_effect=lambda p: MockAggregateCursor([{"count": 2}])
-    ):
-        wait_for_fulltext_docs_in_index(
-            collection, FULLTEXT_INDEX_NAME, "text", n_docs=2, timeout=5
-        )
+    # Should raise ValueError for non-existent index
+    with pytest.raises(ValueError, match="does not exist"):
+        wait_for_docs_in_index(collection, "nonexistent_index", 1)
 
 
 def test_wait_for_fulltext_docs_in_index_raises_on_timeout(collection: Collection) -> None:
     """A timeout raises rather than returning a value a caller could ignore."""
-    collection.insert_many([{"text": "doc"}])
+    with pytest.raises(TimeoutError, match="did not index 99 documents"):
+        wait_for_fulltext_docs_in_index(
+            collection, FULLTEXT_INDEX_NAME, "text", n_docs=99, timeout=3
+        )
 
-    with patch.object(collection, "aggregate", side_effect=lambda p: MockAggregateCursor([])):
-        with pytest.raises(TimeoutError, match="did not index 1 documents"):
-            wait_for_fulltext_docs_in_index(collection, FULLTEXT_INDEX_NAME, "text", timeout=1)
+
+def test_indexes(collection: Collection, requires_search) -> None:
+    """Tests, create, wait, and drop index functions together."""
+
+    # Clean up existing indexes
+    for index_info in collection.list_search_indexes():
+        drop_search_index(collection, index_info["name"], wait_until_complete=TIMEOUT)
+    assert len(collection.list_search_indexes().to_list()) == 0
+
+    # Create vector search index
+    create_vector_search_index(
+        collection=collection,
+        index_name=VECTOR_INDEX_NAME,
+        dimensions=DIMENSIONS,
+        path="embedding",
+        similarity="cosine",
+        wait_until_complete=TIMEOUT,
+    )
+
+    # Verify index was created
+    assert is_index_ready(collection, VECTOR_INDEX_NAME)
+    indexes = list(collection.list_search_indexes())
+    assert len(indexes) == 1
+
+    # Insert test documents with mocked embeddings
+    n_docs = 5
+    docs = [{"embedding": [0.1] * DIMENSIONS, "page_content": f"doc {i}"} for i in range(n_docs)]
+    collection.insert_many(docs)
+
+    # Wait for documents to be indexed
+    assert wait_for_docs_in_index(collection, VECTOR_INDEX_NAME, n_docs)
+
+    # Create fulltext search index
+    create_fulltext_search_index(
+        collection=collection,
+        index_name=FULLTEXT_INDEX_NAME,
+        field=FULLTEXT_FIELDS,
+        wait_until_complete=TIMEOUT,
+    )
+
+    # Verify index was created
+    assert is_index_ready(collection, FULLTEXT_INDEX_NAME)
+    indexes = collection.list_search_indexes().to_list()
+    assert len(indexes) == 2
+
+    # Wait for documents to be indexed
+    assert wait_for_fulltext_docs_in_index(collection, FULLTEXT_INDEX_NAME, "page_content")
+
+    # `field` also accepts a single string, the form most callers use. A stored
+    # definition is readable as soon as the index is created, so checking this
+    # branch needs no readiness wait, which is the expensive part on Atlas.
+    create_fulltext_search_index(
+        collection=collection, index_name="fulltext_single_field", field="description"
+    )
+    single = collection.list_search_indexes("fulltext_single_field").try_next()
+    assert single is not None
+    assert single["latestDefinition"]["mappings"]["dynamic"] is False
+    assert set(single["latestDefinition"]["mappings"]["fields"]) == {"description"}
+    drop_search_index(collection, "fulltext_single_field", wait_until_complete=TIMEOUT)
+
+    # Verify index values
+    for idx in indexes:
+        if idx["name"] == FULLTEXT_INDEX_NAME:
+            assert idx["type"] == "search"
+            assert idx["latestDefinition"]["mappings"]["dynamic"] is False
+            assert set(idx["latestDefinition"]["mappings"]["fields"]) == set(FULLTEXT_FIELDS)
+        elif idx["name"] == VECTOR_INDEX_NAME:
+            assert idx["latestDefinition"]["fields"][0]["type"] == "vector"
+            assert idx["latestDefinition"]["fields"][0]["path"] == "embedding"
+            assert idx["latestDefinition"]["fields"][0]["similarity"] == "cosine"
+            assert idx["latestDefinition"]["fields"][0]["numDimensions"] == DIMENSIONS
+        else:
+            raise AssertionError(f"Unexpected index name: {idx['name']}")
+
+    # TODO: Test that we can update the index
+    #   "collection.update_vector_search_index requires [https://jira.mongodb.org/browse/DRIVERS-3078]"
+    """
+    similarity_new = "euclidean"
+    update_vector_search_index(
+        collection=collection,
+        index_name=VECTOR_INDEX_NAME,
+        dimensions=DIMENSIONS,
+        path="embedding",
+        similarity=similarity_new,
+        wait_until_complete=TIMEOUT,
+    )
+    assert is_index_ready(collection, VECTOR_INDEX_NAME)
+    assert len(collection.list_search_indexes().to_list()) == 2
+    """
+    # Drop an index and verify one remains
+    drop_search_index(collection, VECTOR_INDEX_NAME, wait_until_complete=5)
+    assert [i["name"] for i in collection.list_search_indexes()] == [FULLTEXT_INDEX_NAME]
