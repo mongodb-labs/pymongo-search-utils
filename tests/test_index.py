@@ -160,6 +160,9 @@ def test_wait_for_fulltext_docs_in_index_raises_on_timeout(collection: Collectio
 def test_indexes(collection: Collection, requires_search) -> None:
     """Tests, create, wait, and drop index functions together."""
 
+    # Clean up collection
+    collection.delete_many({})
+
     # Clean up existing indexes
     for index_info in collection.list_search_indexes():
         drop_search_index(collection, index_info["name"], wait_until_complete=TIMEOUT)
