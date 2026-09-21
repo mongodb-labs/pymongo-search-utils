@@ -264,9 +264,7 @@ def drop_search_index(
     collection.drop_search_index(index_name)
     if wait_until_complete:
         wait_for_predicate(
-            predicate=lambda: not any(
-                ix["name"] == index_name for ix in collection.list_search_indexes()
-            ),
+            predicate=lambda: collection.list_search_indexes(index_name).try_next() is None,
             err=f"Index {index_name} did not drop in {wait_until_complete}!",
             timeout=wait_until_complete,
         )
