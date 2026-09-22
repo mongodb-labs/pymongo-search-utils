@@ -38,6 +38,8 @@ def collection(client: MongoClient) -> Generator:
     clxn.delete_many({})
     yield clxn
     clxn.delete_many({})
+    for index in clxn.list_search_indexes():
+        clxn.drop_search_index(index["name"])
 
 
 def test_vector_search_index_definition() -> None:
