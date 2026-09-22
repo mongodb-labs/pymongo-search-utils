@@ -2,7 +2,7 @@
 
 ______________________________________________________________________
 
-## Changes in version 0.3.1 (XXXX/XX/XX)
+## Changes in version 0.4.0 (XXXX/XX/XX)
 
 - Add `wait_for_fulltext_docs_in_index`, which waits for a fulltext index to catch up
   with documents inserted after the index was created.
