@@ -429,7 +429,7 @@ def wait_for_fulltext_docs_in_index(
         TimeoutError: If the index does not report n_docs within the timeout.
     """
     all_docs = collection.count_documents({})
-    if n_docs == 0 or all_docs == 0:
+    if n_docs == 0 or (n_docs is None and all_docs == 0):
         return True
     if n_docs is None:
         n_docs = all_docs
