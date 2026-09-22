@@ -150,21 +150,27 @@ def test_wait_for_docs_in_index_nonexistent(
     with pytest.raises(ValueError, match="does not exist"):
         wait_for_docs_in_index(collection, "nonexistent_index", 1)
 
-    with pytest.raises(ValueError, match="does not exist"):
-        wait_for_fulltext_docs_in_index(collection, "nonexistent_index", "foo")
+    with pytest.raises(TimeoutError, match="Index nonexistent_index"):
+        wait_for_fulltext_docs_in_index(collection, "nonexistent_index", "foo", n_docs=1, timeout=5)
     collection.delete_many({})
 
 
-def test_wait_for_fulltext_docs_in_index_raises_on_timeout(
-    collection: Collection, requires_search
-) -> None:
-    """A timeout raises rather than returning a value."""
-    collection.insert_one({"foo": "bar"})
-    with pytest.raises(TimeoutError, match="did not index 99 documents"):
-        wait_for_fulltext_docs_in_index(
-            collection, FULLTEXT_INDEX_NAME, "foo", n_docs=99, timeout=3
-        )
-    collection.delete_many({})
+def test_wait_for_fulltext_docs_in_index_on_empty_collection(client) -> None:
+    """Test case when collection has 0 documents."""
+    db = client[DBNAME]
+    empty_clxn = db.create_collection("empty")
+
+    # Create fulltext search index
+    create_fulltext_search_index(
+        collection=empty_clxn,
+        index_name=FULLTEXT_INDEX_NAME,
+        field=FULLTEXT_FIELDS,
+        wait_until_complete=TIMEOUT,
+    )
+    # Wait for documents to be indexed
+    assert wait_for_fulltext_docs_in_index(empty_clxn, FULLTEXT_INDEX_NAME, "page_content")
+    # Clean up
+    empty_clxn.drop()
 
 
 def test_indexes(collection: Collection, requires_search) -> None:
@@ -217,6 +223,12 @@ def test_indexes(collection: Collection, requires_search) -> None:
     # Wait for documents to be indexed
     assert wait_for_fulltext_docs_in_index(collection, FULLTEXT_INDEX_NAME, "page_content")
 
+    # Assert exception is raised on timeout is raised instead of falsy value
+    with pytest.raises(TimeoutError, match="did not index 99 documents"):
+        wait_for_fulltext_docs_in_index(
+            collection, FULLTEXT_INDEX_NAME, "foo", n_docs=99, timeout=3
+        )
+
     # `field` also accepts a single string, the form most callers use. A stored
     # definition is readable as soon as the index is created, so checking this
     # branch needs no readiness wait, which is the expensive part on Atlas.
@@ -263,22 +275,3 @@ def test_indexes(collection: Collection, requires_search) -> None:
     # Drop an index and verify one remains
     drop_search_index(collection, VECTOR_INDEX_NAME, wait_until_complete=5)
     assert [i["name"] for i in collection.list_search_indexes()] == [FULLTEXT_INDEX_NAME]
-
-
-def test_wait_for_fulltext_docs_in_index_on_empty_collection(client) -> None:
-    """Test case when collection has 0 documents."""
-    db = client[DBNAME]
-    if "empty" not in db.list_collection_names():
-        empty_clxn = db.create_collection("empty")
-    else:
-        empty_clxn = db["empty"]
-
-    # Create fulltext search index
-    create_fulltext_search_index(
-        collection=empty_clxn,
-        index_name=FULLTEXT_INDEX_NAME,
-        field=FULLTEXT_FIELDS,
-        wait_until_complete=TIMEOUT,
-    )
-    # Wait for documents to be indexed
-    assert wait_for_fulltext_docs_in_index(empty_clxn, FULLTEXT_INDEX_NAME, "page_content")

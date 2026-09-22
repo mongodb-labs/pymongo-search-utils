@@ -4,6 +4,7 @@ from collections.abc import Callable
 from time import monotonic, sleep
 from typing import Any, Literal
 
+from pymongo.errors import OperationFailure
 from pymongo.operations import SearchIndexModel
 from pymongo.synchronous.collection import Collection
 
@@ -385,7 +386,7 @@ def wait_for_docs_in_index(
                 "index": index_name,
                 "path": field,
                 "queryVector": query_vector,
-                "numCandidates": n_docs,
+                "numCandidates": min(10 * n_docs, 10000),
                 "limit": n_docs,
             }
         },
@@ -420,6 +421,7 @@ def wait_for_fulltext_docs_in_index(
         path (str): The indexed field to query, e.g. "text" or "title.text".
         n_docs (Optional[int]): The number of documents to expect in the index.
             Defaults to the number of documents in the collection.
+            Returns True if n_docs == 0 without consulting index.
         timeout (float): Number of seconds to wait before giving up.
 
     Returns:
@@ -428,10 +430,6 @@ def wait_for_fulltext_docs_in_index(
     Raises:
         TimeoutError: If the index does not report n_docs within the timeout.
     """
-
-    index = collection.list_search_indexes(index_name).try_next()
-    if index is None:
-        raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
 
     all_docs = collection.count_documents({})
     if n_docs == 0 or (n_docs is None and all_docs == 0):
@@ -444,7 +442,10 @@ def wait_for_fulltext_docs_in_index(
     ]
     start = monotonic()
     while monotonic() - start <= timeout:
-        result = collection.aggregate(pipeline).to_list()
+        try:
+            result = collection.aggregate(pipeline).to_list()
+        except OperationFailure:
+            result = []
         if result and result[0]["count"] == n_docs:
             return True
         sleep(INTERVAL)
