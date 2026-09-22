@@ -53,6 +53,11 @@ class TestParseCommand:
         result = parse_command(command)
         assert result == [{"$match": {"status": "active"}}, {"$limit": 10}]
 
+    def test_pipeline_match_with_in_operator(self):
+        command = 'db.collection.aggregate([{$match: {status: {$in: ["active", "pending"]}}}])'
+        result = parse_command(command)
+        assert result == [{"$match": {"status": {"$in": ["active", "pending"]}}}]
+
     def test_invalid_command_missing_aggregate(self):
         command = "db.collection.find({x: 1})"
         with pytest.raises(ValueError, match="Could not extract aggregation pipeline"):
@@ -62,6 +67,154 @@ class TestParseCommand:
         command = "db.collection.aggregate({$match: {x: 1}})"
         with pytest.raises(ValueError, match="Aggregation pipeline must be a list"):
             parse_command(command)
+
+    def test_disallowed_call_rejected(self):
+        command = "db.collection.aggregate([len([1, 2])])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_attribute_access_rejected(self):
+        command = "db.collection.aggregate([datetime.now])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_bare_name_rejected(self):
+        command = "db.collection.aggregate([some_var])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_subscript_rejected(self):
+        command = "db.collection.aggregate([[1, 2][0]])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_pipeline_with_negative_number(self):
+        command = "db.collection.aggregate([{$addFields: {n: -1}}])"
+        result = parse_command(command)
+        assert result == [{"$addFields": {"n": -1}}]
+
+    def test_pipeline_with_float_and_bool(self):
+        command = "db.collection.aggregate([{$addFields: {f: 1.5, b: True, x: None}}])"
+        result = parse_command(command)
+        assert result == [{"$addFields": {"f": 1.5, "b": True, "x": None}}]
+
+    def test_pipeline_group_with_sum(self):
+        command = "db.orders.aggregate([{$group: {_id: '$cust_id', total: {$sum: '$amount'}}}])"
+        result = parse_command(command)
+        assert result == [{"$group": {"_id": "$cust_id", "total": {"$sum": "$amount"}}}]
+
+    def test_pipeline_sort_descending(self):
+        command = "db.collection.aggregate([{$sort: {created: -1}}])"
+        result = parse_command(command)
+        assert result == [{"$sort": {"created": -1}}]
+
+    def test_pipeline_project_with_exclusion(self):
+        command = "db.collection.aggregate([{$project: {name: 1, address: 0, _id: 0}}])"
+        result = parse_command(command)
+        assert result == [{"$project": {"name": 1, "address": 0, "_id": 0}}]
+
+    def test_pipeline_lookup(self):
+        command = (
+            'db.orders.aggregate([{$lookup: {from: "customers", '
+            'localField: "cust_id", foreignField: "_id", as: "customer"}}])'
+        )
+        result = parse_command(command)
+        assert result == [
+            {
+                "$lookup": {
+                    "from": "customers",
+                    "localField": "cust_id",
+                    "foreignField": "_id",
+                    "as": "customer",
+                }
+            }
+        ]
+
+    def test_pipeline_match_nested_document(self):
+        command = 'db.collection.aggregate([{$match: {address: {city: "NYC", zip: "10001"}}}])'
+        result = parse_command(command)
+        assert result == [{"$match": {"address": {"city": "NYC", "zip": "10001"}}}]
+
+    def test_pipeline_match_in_with_object_ids(self):
+        command = (
+            "db.collection.aggregate([{$match: {_id: {$in: ["
+            "ObjectId('507f1f77bcf86cd799439011'), "
+            "ObjectId('507f1f77bcf86cd799439012')]}}}])"
+        )
+        result = parse_command(command)
+        assert result == [
+            {
+                "$match": {
+                    "_id": {
+                        "$in": [
+                            ObjectId("507f1f77bcf86cd799439011"),
+                            ObjectId("507f1f77bcf86cd799439012"),
+                        ]
+                    }
+                }
+            }
+        ]
+
+    def test_pipeline_match_date_with_gt(self):
+        command = (
+            'db.collection.aggregate([{$match: {created: {$gt: ISODate("2024-01-01T00:00:00Z")}}}])'
+        )
+        result = parse_command(command)
+        expected_dt = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == [{"$match": {"created": {"$gt": expected_dt}}}]
+
+    @pytest.mark.parametrize("name", ["eval", "exec", "open", "input", "print", "sorted"])
+    def test_non_whitelisted_call_rejected(self, name):
+        command = f"db.collection.aggregate([{name}('x')])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_module_function_call_rejected(self):
+        command = "db.collection.aggregate([os.getcwd()])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_fstring_rejected(self):
+        command = "db.collection.aggregate([f'{1 + 1}'])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_comprehension_rejected(self):
+        command = "db.collection.aggregate([x for x in [1]])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_starred_args_rejected(self):
+        command = "db.collection.aggregate([ObjectId(*['507f1f77bcf86cd799439011'])])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_keyword_unpacking_rejected(self):
+        command = "db.collection.aggregate([datetime(**{'year': 2000})])"
+        with pytest.raises(ValueError, match="Failed to parse aggregation pipeline"):
+            parse_command(command)
+
+    def test_reserved_looking_dict_key_is_data(self):
+        command = "db.collection.aggregate([{'$match': {'_id_extra': 1}}])"
+        result = parse_command(command)
+        assert result == [{"$match": {"_id_extra": 1}}]
+
+    def test_pipeline_multi_stage(self):
+        command = (
+            "db.orders.aggregate(["
+            '{$match: {status: "completed"}}, '
+            '{$group: {_id: "$cust_id", total: {$sum: "$amount"}, count: {$sum: 1}}}, '
+            "{$sort: {total: -1}}, "
+            "{$limit: 10}"
+            "])"
+        )
+        result = parse_command(command)
+        assert result == [
+            {"$match": {"status": "completed"}},
+            {"$group": {"_id": "$cust_id", "total": {"$sum": "$amount"}, "count": {"$sum": 1}}},
+            {"$sort": {"total": -1}},
+            {"$limit": 10},
+        ]
 
 
 class TestParseDoc:
