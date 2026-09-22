@@ -428,6 +428,11 @@ def wait_for_fulltext_docs_in_index(
     Raises:
         TimeoutError: If the index does not report n_docs within the timeout.
     """
+
+    index = collection.list_search_indexes(index_name).try_next()
+    if index is None:
+        raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
+
     all_docs = collection.count_documents({})
     if n_docs == 0 or (n_docs is None and all_docs == 0):
         return True

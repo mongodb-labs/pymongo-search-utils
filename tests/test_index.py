@@ -25,7 +25,7 @@ FULLTEXT_INDEX_NAME = "fulltext_index"
 # A list exercises the field: str | list[str] branch of create_fulltext_search_index.
 FULLTEXT_FIELDS = ["page_content", "title"]
 
-TIMEOUT = 120  # TODO - This is a bitter pill to swallow
+TIMEOUT = 120
 DIMENSIONS = 10
 
 
@@ -140,21 +140,29 @@ def test_wait_for_predicate() -> None:
 
 def test_wait_for_docs_in_index_nonexistent(
     collection: Collection,
+    requires_search,
 ) -> None:
-    """Test wait_for_docs_in_index raises error for non-existent index."""
+    """Test wait_for_docs_in_index raises ValueError for non-existent index."""
 
-    # Should raise ValueError for non-existent index
+    collection.insert_one({"foo": "bar"})
     with pytest.raises(ValueError, match="does not exist"):
         wait_for_docs_in_index(collection, "nonexistent_index", 1)
 
+    with pytest.raises(ValueError, match="does not exist"):
+        wait_for_fulltext_docs_in_index(collection, "nonexistent_index", "foo")
+    collection.delete_many({})
 
-def test_wait_for_fulltext_docs_in_index_raises_on_timeout(collection: Collection) -> None:
-    """A timeout raises rather than returning a value a caller could ignore."""
+
+def test_wait_for_fulltext_docs_in_index_raises_on_timeout(
+    collection: Collection, requires_search
+) -> None:
+    """A timeout raises rather than returning a value."""
+    collection.insert_one({"foo": "bar"})
     with pytest.raises(TimeoutError, match="did not index 99 documents"):
-        collection.insert_one({"foo": "bar"})
         wait_for_fulltext_docs_in_index(
-            collection, FULLTEXT_INDEX_NAME, "text", n_docs=99, timeout=3
+            collection, FULLTEXT_INDEX_NAME, "foo", n_docs=99, timeout=3
         )
+    collection.delete_many({})
 
 
 def test_indexes(collection: Collection, requires_search) -> None:
