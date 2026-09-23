@@ -22,7 +22,6 @@ DBNAME = "pymongo_search_utils_test"
 COLLECTION_NAME = "test_index"
 VECTOR_INDEX_NAME = "vector_index"
 FULLTEXT_INDEX_NAME = "fulltext_index"
-# A list exercises the field: str | list[str] branch of create_fulltext_search_index.
 FULLTEXT_FIELDS = ["page_content", "title"]
 
 TIMEOUT = 120
