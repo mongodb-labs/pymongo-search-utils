@@ -468,11 +468,10 @@ def wait_for_fulltext_docs_in_index(
             n_docs, within the timeout.
     """
     start = monotonic()
-    all_docs = collection.count_documents({})
-    if n_docs == 0 or (n_docs is None and all_docs == 0):
+
+    n_docs = collection.count_documents({}) if n_docs is None else n_docs
+    if n_docs == 0:
         return True
-    if n_docs is None:
-        n_docs = all_docs
 
     # A freshly created index is neither immediately visible nor immediately queryable
     wait_for_predicate(
