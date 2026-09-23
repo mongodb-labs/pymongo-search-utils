@@ -371,6 +371,8 @@ def wait_for_docs_in_index(
     # is not queryable until it reports READY. Neither is an error: a caller that
     # creates an index and waits on it in the next breath would race. Both are
     # part of the wait, against one deadline shared with the catch-up loop below.
+    if n_docs == 0:
+        return True
     start = monotonic()
     wait_for_predicate(
         predicate=lambda: is_index_ready(collection, index_name),
@@ -444,7 +446,10 @@ def wait_for_fulltext_docs_in_index(
         collection (Collection): A MongoDB Collection.
         index_name (str): The name of the fulltext index.
         path (str): The indexed field to query, e.g. "text" or "title.text".
-        n_docs (Optional[int]): The number of documents to expect in the index.
+        n_docs (Optional[int]): The number of documents the index is expected to
+            hold with a value at `path`. Note that this counts documents *having*
+            that field, not documents in the collection.
+            The wait stops once the index reports at least this many.
             Defaults to the number of documents in the collection.
             Returns True if n_docs == 0 without consulting index.
         timeout (float): Number of seconds to wait before giving up.
@@ -491,7 +496,7 @@ def wait_for_fulltext_docs_in_index(
         except OperationFailure as exc:
             last_error = exc
             result = []
-        if result and result[0]["count"] == n_docs:
+        if result and result[0]["count"] >= n_docs:
             return True
         sleep(INTERVAL)
     raise TimeoutError(
