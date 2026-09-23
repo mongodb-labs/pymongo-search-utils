@@ -278,7 +278,7 @@ def drop_vector_search_index(
     *,
     wait_until_complete: float | None = None,
 ) -> None:
-    """Drop an existing search index - vector or fulltext.
+    """Drop an existing vector or fulltext search index.
 
     .. deprecated::
         Use :func:`drop_search_index` instead. This function never did anything
