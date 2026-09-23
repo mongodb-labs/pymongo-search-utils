@@ -31,15 +31,18 @@ DIMENSIONS = 10
 
 @pytest.fixture(scope="module")
 def collection(client: MongoClient) -> Generator:
-    if COLLECTION_NAME not in client[DBNAME].list_collection_names():
-        clxn = client[DBNAME].create_collection(COLLECTION_NAME)
-    else:
-        clxn = client[DBNAME][COLLECTION_NAME]
-    clxn.delete_many({})
+    client[DBNAME].drop_collection(COLLECTION_NAME)
+    clxn = client[DBNAME].create_collection(COLLECTION_NAME)
     yield clxn
-    clxn.delete_many({})
-    for index in clxn.list_search_indexes():
-        clxn.drop_search_index(index["name"])
+    clxn.drop()
+
+
+@pytest.fixture(scope="module")
+def empty_clxn(client: MongoClient) -> Generator[Collection, None, None]:
+    client[DBNAME].drop_collection("empty")
+    clxn = client[DBNAME].create_collection("empty")
+    yield clxn
+    clxn.drop()
 
 
 def test_vector_search_index_definition() -> None:
@@ -144,22 +147,24 @@ def test_wait_for_docs_in_index_nonexistent(
     collection: Collection,
     requires_search,
 ) -> None:
-    """Test wait_for_docs_in_index raises ValueError for non-existent index."""
+    """Confirm an index that never becomes ready raising times ou, not ValueError.
+
+    A newly created index is not visible to $listSearchIndexes straight away, so
+    "not there yet" cannot be distinguished from "wrong name" on a single look.
+    Both now wait out the timeout.
+    """
 
     collection.insert_one({"foo": "bar"})
-    with pytest.raises(ValueError, match="does not exist"):
-        wait_for_docs_in_index(collection, "nonexistent_index", 1)
+    with pytest.raises(TimeoutError, match="was not ready"):
+        wait_for_docs_in_index(collection, "nonexistent_index", 1, timeout=3)
 
     with pytest.raises(TimeoutError, match="Index nonexistent_index"):
         wait_for_fulltext_docs_in_index(collection, "nonexistent_index", "foo", n_docs=1, timeout=5)
     collection.delete_many({})
 
 
-def test_wait_for_fulltext_docs_in_index_on_empty_collection(client) -> None:
+def test_wait_for_fulltext_docs_in_index_on_empty_collection(empty_clxn, requires_search) -> None:
     """Test case when collection has 0 documents."""
-    db = client[DBNAME]
-    empty_clxn = db.create_collection("empty")
-
     # Create fulltext search index
     create_fulltext_search_index(
         collection=empty_clxn,
@@ -169,8 +174,6 @@ def test_wait_for_fulltext_docs_in_index_on_empty_collection(client) -> None:
     )
     # Wait for documents to be indexed
     assert wait_for_fulltext_docs_in_index(empty_clxn, FULLTEXT_INDEX_NAME, "page_content")
-    # Clean up
-    empty_clxn.drop()
 
 
 def test_indexes(collection: Collection, requires_search) -> None:
@@ -223,11 +226,31 @@ def test_indexes(collection: Collection, requires_search) -> None:
     # Wait for documents to be indexed
     assert wait_for_fulltext_docs_in_index(collection, FULLTEXT_INDEX_NAME, "page_content")
 
-    # Assert exception is raised on timeout is raised instead of falsy value
+    # In the next two, we confirm a timeout is raised
+    # rather than returning a falsy value a caller could ignore.
+
+    # n_docs=99 is unreachable: only 5 documents were inserted above.
+
+    # "foo", a path that is not in the index never produces a count at all, so $count
+    # emits no document and the loop sees an empty result.
     with pytest.raises(TimeoutError, match="did not index 99 documents"):
         wait_for_fulltext_docs_in_index(
             collection, FULLTEXT_INDEX_NAME, "foo", n_docs=99, timeout=3
         )
+
+    # "page_content", an indexed path (produces a count that never reaches n_docs, which
+    # exercises the comparison itself rather than the empty-result guard.
+    with pytest.raises(TimeoutError, match="did not index 99 documents"):
+        wait_for_fulltext_docs_in_index(
+            collection, FULLTEXT_INDEX_NAME, "page_content", n_docs=99, timeout=3
+        )
+
+    # Each helper rejects the other's index type outright, rather than waiting out
+    # the timeout on a query that can never succeed.
+    with pytest.raises(ValueError, match="is not a fulltext search index"):
+        wait_for_fulltext_docs_in_index(collection, VECTOR_INDEX_NAME, "page_content", timeout=3)
+    with pytest.raises(ValueError, match="is not a vector search index"):
+        wait_for_docs_in_index(collection, FULLTEXT_INDEX_NAME, n_docs, timeout=3)
 
     # `field` also accepts a single string, the form most callers use. A stored
     # definition is readable as soon as the index is created, so checking this
@@ -257,6 +280,9 @@ def test_indexes(collection: Collection, requires_search) -> None:
         else:
             raise AssertionError(f"Unexpected index name: {idx['name']}")
 
+    # Drop an index and verify one remains
+    drop_search_index(collection, VECTOR_INDEX_NAME, wait_until_complete=TIMEOUT)
+    assert [i["name"] for i in collection.list_search_indexes()] == [FULLTEXT_INDEX_NAME]
     # TODO: Test that we can update the index
     #   "collection.update_vector_search_index requires [https://jira.mongodb.org/browse/DRIVERS-3078]"
     """
@@ -272,6 +298,3 @@ def test_indexes(collection: Collection, requires_search) -> None:
     assert is_index_ready(collection, VECTOR_INDEX_NAME)
     assert len(collection.list_search_indexes().to_list()) == 2
     """
-    # Drop an index and verify one remains
-    drop_search_index(collection, VECTOR_INDEX_NAME, wait_until_complete=5)
-    assert [i["name"] for i in collection.list_search_indexes()] == [FULLTEXT_INDEX_NAME]

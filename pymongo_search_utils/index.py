@@ -342,6 +342,8 @@ def wait_for_docs_in_index(
     collection: Collection[Any],
     index_name: str,
     n_docs: int,
+    *,
+    timeout: float = TIMEOUT,
 ) -> Literal[True]:
     """Wait until a vector search index has indexed the expected number of documents.
 
@@ -354,17 +356,30 @@ def wait_for_docs_in_index(
         collection (Collection): A MongoDB Collection.
         index_name (str): The name of the vector search index.
         n_docs (int): The number of documents to expect in the index.
+        timeout (float): Number of seconds to wait before giving up. Covers waiting
+            for the index to become ready and waiting for it to catch up, together.
 
     Returns:
         True, once the index reports n_docs documents.
 
     Raises:
-        ValueError: If the index does not exist, or is not a vector search index.
-        TimeoutError: If the index does not report n_docs within TIMEOUT seconds.
+        ValueError: If the index is not a vector search index.
+        TimeoutError: If the index does not become ready, or does not report
+            n_docs, within the timeout.
     """
+    # A newly created index is not visible to $listSearchIndexes immediately, and
+    # is not queryable until it reports READY. Neither is an error: a caller that
+    # creates an index and waits on it in the next breath would race. Both are
+    # part of the wait, against one deadline shared with the catch-up loop below.
+    start = monotonic()
+    wait_for_predicate(
+        predicate=lambda: is_index_ready(collection, index_name),
+        err=f"Index {index_name} was not ready in {timeout}s.",
+        timeout=timeout,
+    )
     index = collection.list_search_indexes(index_name).try_next()
-    if index is None:
-        raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
+    if index is None:  # dropped between becoming ready and being read back
+        raise TimeoutError(f"Index {index_name} was not ready in {timeout}s.")
 
     # A vector search index defines an array of fields, only one of which is the
     # vector. Filter fields may be declared before it, so select by type rather
@@ -392,12 +407,22 @@ def wait_for_docs_in_index(
         },
         {"$project": {"_id": 1, "search_score": {"$meta": "vectorSearchScore"}}},
     ]
-    start = monotonic()
-    while monotonic() - start <= TIMEOUT:
-        if len(collection.aggregate(query).to_list()) == n_docs:
+    last_error: OperationFailure | None = None
+    while monotonic() - start <= timeout:
+        try:
+            results = collection.aggregate(query).to_list()
+        except OperationFailure as exc:
+            # READY and queryable are not quite the same instant. Treat a failure
+            # as "not caught up yet", but keep the last one so that a persistent
+            # error is visible as the cause if we give up.
+            last_error = exc
+            results = []
+        if len(results) == n_docs:
             return True
         sleep(INTERVAL)
-    raise TimeoutError(f"Index {index_name} did not index {n_docs} documents in {TIMEOUT}s.")
+    raise TimeoutError(
+        f"Index {index_name} did not index {n_docs} documents in {timeout}s."
+    ) from last_error
 
 
 def wait_for_fulltext_docs_in_index(
@@ -428,25 +453,47 @@ def wait_for_fulltext_docs_in_index(
         True, once the index reports n_docs documents.
 
     Raises:
-        TimeoutError: If the index does not report n_docs within the timeout.
+        ValueError: If the index is not a fulltext search index.
+        TimeoutError: If the index does not become ready, or does not report
+            n_docs, within the timeout.
     """
-
+    start = monotonic()
     all_docs = collection.count_documents({})
     if n_docs == 0 or (n_docs is None and all_docs == 0):
         return True
     if n_docs is None:
         n_docs = all_docs
+
+    # A freshly created index is neither immediately visible nor immediately queryable
+    wait_for_predicate(
+        predicate=lambda: is_index_ready(collection, index_name),
+        err=f"Index {index_name} was not ready in {timeout}s.",
+        timeout=timeout,
+    )
+
+    # Confirm index type.
+    # fulltext index always defines "mappings", a vector one never does.
+    index = collection.list_search_indexes(index_name).try_next()
+    if index is not None and "mappings" not in index["latestDefinition"]:
+        raise ValueError(
+            f"Index {index_name} is not a fulltext search index. "
+            "Use wait_for_docs_in_index for vector search indexes."
+        )
+
     pipeline: list[dict[str, Any]] = [
         {"$search": {"index": index_name, "exists": {"path": path}}},
         {"$count": "count"},
     ]
-    start = monotonic()
+    last_error: OperationFailure | None = None
     while monotonic() - start <= timeout:
         try:
             result = collection.aggregate(pipeline).to_list()
-        except OperationFailure:
+        except OperationFailure as exc:
+            last_error = exc
             result = []
         if result and result[0]["count"] == n_docs:
             return True
         sleep(INTERVAL)
-    raise TimeoutError(f"Index {index_name} did not index {n_docs} documents in {timeout}s.")
+    raise TimeoutError(
+        f"Index {index_name} did not index {n_docs} documents in {timeout}s."
+    ) from last_error
