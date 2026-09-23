@@ -363,14 +363,15 @@ def wait_for_docs_in_index(
         True, once the index reports n_docs documents.
 
     Raises:
-        ValueError: If the index is not a vector search index.
+        ValueError: If the index is not a vector search index, if n_docs is
+            negative, or if n_docs exceeds the numCandidates ceiling of 10000.
         TimeoutError: If the index does not become ready, or does not report
             n_docs, within the timeout.
     """
-    if n_docs == 0:
-        return True
     if n_docs < 1:
         raise ValueError(f"{n_docs=} must be a positive integer")
+    if n_docs == 0:
+        return True
     if n_docs > 10000:
         raise ValueError(f"{n_docs=} exceeds the $vectorSearch numCandidates ceiling of 10000.")
 
@@ -455,7 +456,8 @@ def wait_for_fulltext_docs_in_index(
             hold with a value at `path`. Note that this counts documents *having*
             that field, not documents in the collection.
             The wait stops once the index reports at least this many.
-            Defaults to the number of documents in the collection.
+            Defaults to the number of documents in the collection that have a
+            value at `path`, which is the same population the index counts.
             Returns True if n_docs == 0 without consulting index.
         timeout (float): Number of seconds to wait before giving up.
 
@@ -469,7 +471,7 @@ def wait_for_fulltext_docs_in_index(
     """
     start = monotonic()
 
-    n_docs = collection.count_documents({}) if n_docs is None else n_docs
+    n_docs = collection.count_documents({path: {"$exists": True}}) if n_docs is None else n_docs
     if n_docs == 0:
         return True
 
