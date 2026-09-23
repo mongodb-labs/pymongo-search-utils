@@ -367,12 +367,17 @@ def wait_for_docs_in_index(
         TimeoutError: If the index does not become ready, or does not report
             n_docs, within the timeout.
     """
+    if n_docs == 0:
+        return True
+    if n_docs < 1:
+        raise ValueError(f"{n_docs=} must be a positive integer")
+    if n_docs > 10000:
+        raise ValueError(f"{n_docs=} exceeds the $vectorSearch numCandidates ceiling of 10000.")
+
     # A newly created index is not visible to $listSearchIndexes immediately, and
     # is not queryable until it reports READY. Neither is an error: a caller that
     # creates an index and waits on it in the next breath would race. Both are
     # part of the wait, against one deadline shared with the catch-up loop below.
-    if n_docs == 0:
-        return True
     start = monotonic()
     wait_for_predicate(
         predicate=lambda: is_index_ready(collection, index_name),
