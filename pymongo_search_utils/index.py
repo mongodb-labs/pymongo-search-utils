@@ -105,23 +105,40 @@ def is_index_ready(collection: Collection[Any], index_name: str) -> bool:
 
 
 def wait_for_predicate(
-    predicate: Callable[..., Any], err: str, timeout: float = TIMEOUT, interval: float = INTERVAL
+    predicate: Callable[..., Any],
+    err: str,
+    timeout: float = TIMEOUT,
+    interval: float = INTERVAL,
+    retry_on: tuple[type[BaseException], ...] = (),
 ) -> None:
     """Generic to block until the predicate returns true
+
+    The predicate is evaluated before the clock is checked, so it always runs at
+    least once even if the timeout has already elapsed.
 
     Args:
         predicate (Callable[, bool]): A function that returns a boolean value
         err (str): Error message to raise if nothing occurs
         timeout (float, optional): Wait time for predicate. Defaults to TIMEOUT.
         interval (float, optional): Interval to check predicate. Defaults to DELAY.
+        retry_on (tuple, optional): Exceptions from the predicate to treat as
+            "not ready yet" rather than propagating. The last one seen becomes
+            the cause of the TimeoutError, so a persistent failure stays visible
+            instead of being reported only as a timeout.
 
     Raises:
-        TimeoutError: _description_
+        TimeoutError: If the predicate does not return true within the timeout.
     """
     start = monotonic()
-    while not predicate():
+    last_error: BaseException | None = None
+    while True:
+        try:
+            if predicate():
+                return
+        except retry_on as exc:
+            last_error = exc
         if monotonic() - start > timeout:
-            raise TimeoutError(err)
+            raise TimeoutError(err) from last_error
         sleep(interval)
 
 
@@ -415,22 +432,16 @@ def wait_for_docs_in_index(
         },
         {"$project": {"_id": 1, "search_score": {"$meta": "vectorSearchScore"}}},
     ]
-    last_error: OperationFailure | None = None
-    while monotonic() - start <= timeout:
-        try:
-            results = collection.aggregate(query).to_list()
-        except OperationFailure as exc:
-            # READY and queryable are not quite the same instant. Treat a failure
-            # as "not caught up yet", but keep the last one so that a persistent
-            # error is visible as the cause if we give up.
-            last_error = exc
-            results = []
-        if len(results) == n_docs:
-            return True
-        sleep(INTERVAL)
-    raise TimeoutError(
-        f"Index {index_name} did not index {n_docs} documents in {timeout}s."
-    ) from last_error
+    # READY and queryable are not quite the same instant, so a failure here means
+    # "not caught up yet". The remaining budget is what is left of the one deadline
+    # shared with the readiness wait above.
+    wait_for_predicate(
+        predicate=lambda: len(collection.aggregate(query).to_list()) == n_docs,
+        err=f"Index {index_name} did not index {n_docs} documents in {timeout}s.",
+        timeout=timeout - (monotonic() - start),
+        retry_on=(OperationFailure,),
+    )
+    return True
 
 
 def wait_for_fulltext_docs_in_index(
@@ -495,16 +506,16 @@ def wait_for_fulltext_docs_in_index(
         {"$search": {"index": index_name, "exists": {"path": path}}},
         {"$count": "count"},
     ]
-    last_error: OperationFailure | None = None
-    while monotonic() - start <= timeout:
-        try:
-            result = collection.aggregate(pipeline).to_list()
-        except OperationFailure as exc:
-            last_error = exc
-            result = []
-        if result and result[0]["count"] >= n_docs:
-            return True
-        sleep(INTERVAL)
-    raise TimeoutError(
-        f"Index {index_name} did not index {n_docs} documents in {timeout}s."
-    ) from last_error
+
+    def indexed_enough() -> bool:
+        """Predicate used. bool guard as count emits no document when no matches."""
+        result = collection.aggregate(pipeline).to_list()
+        return bool(result) and result[0]["count"] >= n_docs
+
+    wait_for_predicate(
+        predicate=indexed_enough,
+        err=f"Index {index_name} did not index {n_docs} documents in {timeout}s.",
+        timeout=timeout - (monotonic() - start),
+        retry_on=(OperationFailure,),
+    )
+    return True
