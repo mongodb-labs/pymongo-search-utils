@@ -385,17 +385,13 @@ def wait_for_docs_in_index(
         TimeoutError: If the index does not become ready, or does not report
             n_docs, within the timeout.
     """
-    if n_docs < 1:
+    if n_docs < 0:
         raise ValueError(f"{n_docs=} must be a positive integer")
     if n_docs == 0:
         return True
     if n_docs > 10000:
         raise ValueError(f"{n_docs=} exceeds the $vectorSearch numCandidates ceiling of 10000.")
 
-    # A newly created index is not visible to $listSearchIndexes immediately, and
-    # is not queryable until it reports READY. Neither is an error: a caller that
-    # creates an index and waits on it in the next breath would race. Both are
-    # part of the wait, against one deadline shared with the catch-up loop below.
     start = monotonic()
     wait_for_predicate(
         predicate=lambda: is_index_ready(collection, index_name),
@@ -483,6 +479,8 @@ def wait_for_fulltext_docs_in_index(
     start = monotonic()
 
     n_docs = collection.count_documents({path: {"$exists": True}}) if n_docs is None else n_docs
+    if n_docs < 0:
+        raise ValueError(f"{n_docs=} must be a positive integer")
     if n_docs == 0:
         return True
 
@@ -492,10 +490,11 @@ def wait_for_fulltext_docs_in_index(
         err=f"Index {index_name} was not ready in {timeout}s.",
         timeout=timeout,
     )
-
+    index = collection.list_search_indexes(index_name).try_next()
+    if index is None:  # dropped between becoming ready and being read back
+        raise TimeoutError(f"Index {index_name} was not ready in {timeout}s.")
     # Confirm index type.
     # fulltext index always defines "mappings", a vector one never does.
-    index = collection.list_search_indexes(index_name).try_next()
     if index is not None and "mappings" not in index["latestDefinition"]:
         raise ValueError(
             f"Index {index_name} is not a fulltext search index. "
