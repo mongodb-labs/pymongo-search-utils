@@ -426,7 +426,6 @@ def wait_for_docs_in_index(
                 "limit": n_docs,
             }
         },
-        {"$project": {"_id": 1, "search_score": {"$meta": "vectorSearchScore"}}},
     ]
     # READY and queryable are not quite the same instant, so a failure here means
     # "not caught up yet". The remaining budget is what is left of the one deadline
