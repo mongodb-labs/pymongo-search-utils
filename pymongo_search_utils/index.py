@@ -495,7 +495,7 @@ def wait_for_fulltext_docs_in_index(
         raise TimeoutError(f"Index {index_name} was not ready in {timeout}s.")
     # Confirm index type.
     # fulltext index always defines "mappings", a vector one never does.
-    if index is not None and "mappings" not in index["latestDefinition"]:
+    if "mappings" not in index["latestDefinition"]:
         raise ValueError(
             f"Index {index_name} is not a fulltext search index. "
             "Use wait_for_docs_in_index for vector search indexes."
