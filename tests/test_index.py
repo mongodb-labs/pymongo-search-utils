@@ -18,7 +18,7 @@ from pymongo_search_utils.index import (
     wait_for_predicate,
 )
 
-DBNAME = "pymongo_search_utils_test"
+DB_NAME = "pymongo_search_utils_test"
 COLLECTION_NAME = "test_index"
 VECTOR_INDEX_NAME = "vector_index"
 FULLTEXT_INDEX_NAME = "fulltext_index"
@@ -30,16 +30,16 @@ DIMENSIONS = 10
 
 @pytest.fixture(scope="module")
 def collection(client: MongoClient) -> Generator:
-    client[DBNAME].drop_collection(COLLECTION_NAME)
-    clxn = client[DBNAME].create_collection(COLLECTION_NAME)
+    client[DB_NAME].drop_collection(COLLECTION_NAME)
+    clxn = client[DB_NAME].create_collection(COLLECTION_NAME)
     yield clxn
     clxn.drop()
 
 
 @pytest.fixture(scope="module")
 def empty_clxn(client: MongoClient) -> Generator[Collection, None, None]:
-    client[DBNAME].drop_collection("empty")
-    clxn = client[DBNAME].create_collection("empty")
+    client[DB_NAME].drop_collection("empty")
+    clxn = client[DB_NAME].create_collection("empty")
     yield clxn
     clxn.drop()
 
