@@ -284,16 +284,14 @@ def test_indexes(collection: Collection, requires_search) -> None:
     assert [i["name"] for i in collection.list_search_indexes()] == [FULLTEXT_INDEX_NAME]
     # TODO: Test that we can update the index
     #   "collection.update_vector_search_index requires [https://jira.mongodb.org/browse/DRIVERS-3078]"
-    """
-    similarity_new = "euclidean"
-    update_vector_search_index(
-        collection=collection,
-        index_name=VECTOR_INDEX_NAME,
-        dimensions=DIMENSIONS,
-        path="embedding",
-        similarity=similarity_new,
-        wait_until_complete=TIMEOUT,
-    )
-    assert is_index_ready(collection, VECTOR_INDEX_NAME)
-    assert len(collection.list_search_indexes().to_list()) == 2
-    """
+    # similarity_new = "euclidean"
+    # update_vector_search_index(
+    #     collection=collection,
+    #     index_name=VECTOR_INDEX_NAME,
+    #     dimensions=DIMENSIONS,
+    #     path="embedding",
+    #     similarity=similarity_new,
+    #     wait_until_complete=TIMEOUT,
+    # )
+    # assert is_index_ready(collection, VECTOR_INDEX_NAME)
+    # assert len(collection.list_search_indexes().to_list()) == 2
