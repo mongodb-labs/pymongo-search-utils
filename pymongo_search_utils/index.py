@@ -437,14 +437,19 @@ def wait_for_docs_in_index(
     index right after writing to it must wait for mongot to catch up, or they
     see a partial or empty result set.
 
+    .. warning::
+        The check relies on an approximate ``$vectorSearch`` query, which is not
+        guaranteed to return ``n_docs`` results from sparse collections. It is
+        intended for tests, debugging, and local development, not production use.
+
     Args:
         collection (Collection): A MongoDB Collection.
         index_name (str): The name of the vector search index.
         n_docs (int): The number of documents to expect in the index.
         timeout (float): Number of seconds to wait before giving up. Covers waiting
             for the index to become ready and waiting for it to catch up, together.
-        num_candidates (Optional[int]): The number of candidates used is HNSW search.
-            Defaults will work except in pathological cases.
+        num_candidates (Optional[int]): The number of candidates used in HNSW
+            search. Defaults will work except in pathological cases.
 
     Returns:
         True, once the index reports n_docs documents.
@@ -484,7 +489,7 @@ def wait_for_docs_in_index(
                 "index": index_name,
                 "path": field,
                 "queryVector": query_vector,
-                "numCandidates": min(10 * n_docs, 10000),
+                "numCandidates": num_candidates or min(10 * n_docs, 10000),
                 "limit": n_docs,
             }
         },
