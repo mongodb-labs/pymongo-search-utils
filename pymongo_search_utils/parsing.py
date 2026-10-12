@@ -1,5 +1,6 @@
 """Parsing utilities and helpers."""
 
+import ast
 import re
 from datetime import date, datetime, timezone
 from typing import Any
@@ -7,6 +8,14 @@ from typing import Any
 from bson import ObjectId
 from bson.binary import Binary
 from bson.decimal128 import Decimal128
+
+_CALLABLES = {
+    "ObjectId": ObjectId,
+    "datetime": datetime,
+}
+_ATTRIBUTES = {
+    ("timezone", "utc"): timezone.utc,
+}
 
 _BSON_LOOKUP = {
     str: "String",
@@ -20,6 +29,66 @@ _BSON_LOOKUP = {
     Decimal128: "Decimal128",
     Binary: "Binary",
 }
+
+
+def _safe_eval(node: ast.AST) -> Any:
+    """Evaluate a restricted AST: literals + whitelisted BSON constructors only.
+
+    Default-deny: anything not explicitly allowed raises.
+    """
+    if isinstance(node, ast.Expression):
+        return _safe_eval(node.body)
+
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.List):
+        return [_safe_eval(e) for e in node.elts]
+    if isinstance(node, ast.Tuple):
+        return tuple(_safe_eval(e) for e in node.elts)
+    if isinstance(node, ast.Dict):
+        result: dict[Any, Any] = {}
+        for k, v in zip(node.keys, node.values, strict=True):
+            if k is None:
+                raise ValueError("Dict unpacking (**{...}) is not allowed")
+            result[_safe_eval(k)] = _safe_eval(v)
+        return result
+
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.UAdd | ast.USub):
+        operand = _safe_eval(node.operand)
+        if not isinstance(operand, int | float):
+            raise ValueError("Unary +/- is only allowed on numbers")
+        return operand if isinstance(node.op, ast.UAdd) else -operand
+
+    if isinstance(node, ast.Attribute):
+        if isinstance(node.value, ast.Name):
+            key = (node.value.id, node.attr)
+            if key in _ATTRIBUTES:
+                return _ATTRIBUTES[key]
+        raise ValueError(f"Disallowed attribute access: .{node.attr}")
+
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name) or node.func.id not in _CALLABLES:
+            name = node.func.id if isinstance(node.func, ast.Name) else "<expr>"
+            raise ValueError(f"Disallowed call to {name!r}")
+        func = _CALLABLES[node.func.id]
+        args = [_safe_eval(a) for a in node.args]
+        kwargs: dict[str, Any] = {}
+        for kw in node.keywords:
+            if kw.arg is None:
+                raise ValueError("**kwargs are not allowed")
+            kwargs[kw.arg] = _safe_eval(kw.value)
+        return func(*args, **kwargs)
+
+    if isinstance(node, ast.Name):
+        raise ValueError(f"Bare name {node.id!r} is not allowed")
+
+    raise ValueError(f"Disallowed expression node: {type(node).__name__}")
+
+
+def _safe_parse_pipeline(agg_str: str) -> Any:
+    """Parse the aggregation-pipeline body into a list of stages."""
+    tree = ast.parse(agg_str, mode="eval")
+    return _safe_eval(tree)
 
 
 def parse_command(command: str) -> Any:
@@ -42,12 +111,7 @@ def parse_command(command: str) -> Any:
     agg_str = _convert_mongo_js_to_python(quoted_agg_str)
 
     try:
-        eval_globals = {
-            "ObjectId": ObjectId,
-            "datetime": datetime,
-            "timezone": timezone,
-        }
-        agg_pipeline = eval(agg_str, eval_globals)
+        agg_pipeline = _safe_parse_pipeline(agg_str)
         if not isinstance(agg_pipeline, list):
             raise ValueError("Aggregation pipeline must be a list.")
         return agg_pipeline
