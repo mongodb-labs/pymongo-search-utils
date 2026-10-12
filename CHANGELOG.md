@@ -2,6 +2,10 @@
 
 ______________________________________________________________________
 
+## Changes in version 0.4.0 (unreleased)
+
+- Dropped support for Python 3.10. The minimum supported Python version is now 3.11.
+
 ## Changes in version 0.3.0 (2026/2/3)
 
 - Add utilities for MongoDB schema and LLM text to command parsing.
