@@ -2,7 +2,7 @@
 
 import ast
 import re
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from bson import ObjectId
@@ -14,7 +14,7 @@ _CALLABLES = {
     "datetime": datetime,
 }
 _ATTRIBUTES = {
-    ("timezone", "utc"): timezone.utc,
+    ("timezone", "utc"): UTC,
 }
 
 _BSON_LOOKUP = {
