@@ -1,6 +1,6 @@
 """Tests for parsing utilities."""
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 from bson import ObjectId
@@ -34,13 +34,13 @@ class TestParseCommand:
     def test_pipeline_with_iso_date(self):
         command = 'db.collection.aggregate([{$match: {created: ISODate("2024-01-15T10:30:00Z")}}])'
         result = parse_command(command)
-        expected_dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+        expected_dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
         assert result == [{"$match": {"created": expected_dt}}]
 
     def test_pipeline_with_new_date(self):
         command = 'db.collection.aggregate([{$match: {created: new Date("2024-01-15T10:30:00Z")}}])'
         result = parse_command(command)
-        expected_dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+        expected_dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
         assert result == [{"$match": {"created": expected_dt}}]
 
     def test_pipeline_with_whitespace(self):
@@ -160,7 +160,7 @@ class TestParseCommand:
             'db.collection.aggregate([{$match: {created: {$gt: ISODate("2024-01-01T00:00:00Z")}}}])'
         )
         result = parse_command(command)
-        expected_dt = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        expected_dt = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
         assert result == [{"$match": {"created": {"$gt": expected_dt}}}]
 
     @pytest.mark.parametrize("name", ["eval", "exec", "open", "input", "print", "sorted"])
