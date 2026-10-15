@@ -8,7 +8,7 @@ from bson import ObjectId
 from pymongo import MongoClient
 from pymongo.collection import Collection
 
-from pymongo_search_utils import drop_vector_search_index
+from pymongo_search_utils import drop_search_index
 from pymongo_search_utils.index import create_vector_search_index, wait_for_docs_in_index
 from pymongo_search_utils.operation import bulk_embed_and_insert_texts, execute_search_query
 
@@ -323,7 +323,7 @@ class TestExecuteSearchQuery:
                 wait_until_complete=120,
             )
         yield
-        drop_vector_search_index(collection=coll, index_name=VECTOR_INDEX_NAME)
+        drop_search_index(collection=coll, index_name=VECTOR_INDEX_NAME)
 
     @pytest.fixture(scope="class", autouse=True)
     def sample_docs(self, preserved_collection: Collection, vector_search_index):

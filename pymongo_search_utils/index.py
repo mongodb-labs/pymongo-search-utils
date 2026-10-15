@@ -1,8 +1,10 @@
 import logging
-from collections.abc import Callable
+import warnings
+from collections.abc import Callable, Mapping
 from time import monotonic, sleep
-from typing import Any
+from typing import Any, Literal
 
+from pymongo.errors import OperationFailure
 from pymongo.operations import SearchIndexModel
 from pymongo.synchronous.collection import Collection
 
@@ -104,24 +106,106 @@ def is_index_ready(collection: Collection[Any], index_name: str) -> bool:
 
 
 def wait_for_predicate(
-    predicate: Callable[..., Any], err: str, timeout: float = TIMEOUT, interval: float = INTERVAL
+    predicate: Callable[..., Any],
+    err: str,
+    timeout: float = TIMEOUT,
+    interval: float = INTERVAL,
+    retry_on: tuple[type[BaseException], ...] = (),
 ) -> None:
     """Generic to block until the predicate returns true
+
+    The predicate is evaluated before the clock is checked, so it always runs at
+    least once even if the timeout has already elapsed.
 
     Args:
         predicate (Callable[, bool]): A function that returns a boolean value
         err (str): Error message to raise if nothing occurs
         timeout (float, optional): Wait time for predicate. Defaults to TIMEOUT.
         interval (float, optional): Interval to check predicate. Defaults to DELAY.
+        retry_on (tuple, optional): Exceptions from the predicate to treat as
+            "not ready yet" rather than propagating. The last one seen becomes
+            the cause of the TimeoutError, so a persistent failure stays visible
+            instead of being reported only as a timeout.
 
     Raises:
-        TimeoutError: _description_
+        TimeoutError: If the predicate does not return true within the timeout.
     """
     start = monotonic()
-    while not predicate():
+    last_error: BaseException | None = None
+    while True:
+        try:
+            if predicate():
+                return
+        except retry_on as exc:
+            last_error = exc
         if monotonic() - start > timeout:
-            raise TimeoutError(err)
+            raise TimeoutError(err) from last_error
         sleep(interval)
+
+
+def wait_for_index(
+    collection: Collection[Any],
+    index_name: str,
+    timeout: float = TIMEOUT,
+) -> Mapping[str, Any]:
+    """Block until the index is present and ready to be indexed.
+    Args:
+        collection: Collection containing the index.
+        index_name: Name of the index.
+        timeout: Time to wait for the index to be ready.
+
+    A freshly created index is neither immediately visible nor immediately queryable.
+
+    Returns: None
+
+    Raises:
+        TimeoutError: If the index is not ready and seen in Collection's list.
+    """
+    wait_for_predicate(
+        predicate=lambda: is_index_ready(collection, index_name),
+        err=f"Index {index_name} was not ready in {timeout}s.",
+        timeout=timeout,
+    )
+    index = collection.list_search_indexes(index_name).try_next()
+    if index is None:  # Corner case: Index was dropped right after becoming ready.
+        raise TimeoutError(f"Index {index_name} was not ready in {timeout}s.")
+
+    return index
+
+
+def wait_to_be_indexed(
+    collection: Collection[Any],
+    index_name: str,
+    search_pipeline: list[dict[str, Any]],
+    n_docs: int,
+    start: float | None = None,
+    timeout: float = TIMEOUT,
+) -> Literal[True]:
+    """Wait for at least n_docs to be indexed.
+
+    `pipeline` is the search performed. This is different for fulltext and vector
+    indexes, and may change again.
+
+    The predicate used counts the number of documents found.
+    """
+    if n_docs == 0:
+        return True
+
+    def _indexed_enough() -> bool:
+        # bool guard as count emits no document when no matches.
+        result = collection.aggregate(search_pipeline + [{"$count": "count"}]).to_list()
+        return bool(result) and result[0]["count"] >= n_docs
+
+    if start is None:
+        start = monotonic()
+
+    wait_for_predicate(
+        predicate=_indexed_enough,
+        err=f"Index {index_name} did not index {n_docs} documents in {timeout}s.",
+        timeout=timeout - (monotonic() - start),
+        retry_on=(OperationFailure,),
+    )
+    return True
 
 
 def create_vector_search_index(
@@ -183,6 +267,7 @@ def create_vector_search_index(
             predicate=lambda: is_index_ready(collection, index_name),
             err=f"{index_name=} did not complete in {wait_until_complete}!",
             timeout=wait_until_complete,
+            retry_on=(OperationFailure,),
         )
     logger.info(result)
 
@@ -242,8 +327,34 @@ def update_vector_search_index(
             predicate=lambda: is_index_ready(collection, index_name),
             err=f"Index {index_name} update did not complete in {wait_until_complete}!",
             timeout=wait_until_complete,
+            retry_on=(OperationFailure,),
         )
     logger.info("Update succeeded")
+
+
+def drop_search_index(
+    collection: Collection[Any],
+    index_name: str,
+    *,
+    wait_until_complete: float | None = None,
+) -> None:
+    """Drop an existing vector or fulltext search index.
+
+    Args:
+        collection (Collection): MongoDB Collection with index to be dropped.
+        index_name (str): Name of the MongoDB index.
+        wait_until_complete (Optional[float]): If provided, the number of seconds to wait
+            until the index is dropped.
+    """
+    logger.info("Dropping Search Index %s from Collection: %s", index_name, collection.name)
+    collection.drop_search_index(index_name)
+    if wait_until_complete:
+        wait_for_predicate(
+            predicate=lambda: collection.list_search_indexes(index_name).try_next() is None,
+            err=f"Index {index_name} did not drop in {wait_until_complete}!",
+            timeout=wait_until_complete,
+        )
+    logger.info("Search index %s.%s dropped", collection.name, index_name)
 
 
 def drop_vector_search_index(
@@ -252,23 +363,19 @@ def drop_vector_search_index(
     *,
     wait_until_complete: float | None = None,
 ) -> None:
-    """Drop an existing vector search index.
+    """Drop an existing vector or fulltext search index.
 
-    Args:
-        collection (Collection): MongoDB Collection with index to be dropped.
-        index_name (str): Name of the MongoDB index.
-        wait_until_complete (Optional[float]): If provided, number of seconds to wait
-            until search index is ready.
+    .. deprecated:: 0.4.0
+        Use :func:`drop_search_index` instead. This function never did anything
+        vector-specific: it drops any search index by name.
     """
-    logger.info("Dropping Search Index %s from Collection: %s", index_name, collection.name)
-    collection.drop_search_index(index_name)
-    if wait_until_complete:
-        wait_for_predicate(
-            predicate=lambda: len(list(collection.list_search_indexes())) == 0,
-            err=f"Index {index_name} did not drop in {wait_until_complete}!",
-            timeout=wait_until_complete,
-        )
-    logger.info("Vector Search index %s.%s dropped", collection.name, index_name)
+    warnings.warn(
+        "drop_vector_search_index is deprecated; use drop_search_index instead. "
+        "It drops any search index, not only vector ones.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    drop_search_index(collection, index_name, wait_until_complete=wait_until_complete)
 
 
 def create_fulltext_search_index(
@@ -320,39 +427,134 @@ def wait_for_docs_in_index(
     collection: Collection[Any],
     index_name: str,
     n_docs: int,
-) -> bool:
-    """Wait until the given number of documents are indexed by the given index.
+    *,
+    timeout: float = TIMEOUT,
+    num_candidates: int | None = None,
+) -> Literal[True]:
+    """Wait until a vector search index has indexed the expected number of documents.
+
+    Creating an index and waiting for it to become READY does not wait for
+    documents inserted afterwards to become searchable. Callers that query an
+    index right after writing to it must wait for mongot to catch up, or they
+    see a partial or empty result set.
+
+    .. warning::
+        The check relies on an approximate ``$vectorSearch`` query, which is not
+        guaranteed to return ``n_docs`` results from sparse collections. It is
+        intended for tests, debugging, and local development, not production use.
 
     Args:
         collection (Collection): A MongoDB Collection.
-        index_name (str): The name of the index.
-        embedding_field (str): The name of the document field containing embeddings.
+        index_name (str): The name of the vector search index.
         n_docs (int): The number of documents to expect in the index.
+        timeout (float): Number of seconds to wait before giving up. Covers waiting
+            for the index to become ready and waiting for it to catch up, together.
+        num_candidates (Optional[int]): The number of candidates used in HNSW
+            search. Defaults will work except in pathological cases.
+
+    Returns:
+        True, once the index reports n_docs documents.
+
+    Raises:
+        ValueError: If the index is not a vector search index, if n_docs is
+            negative, or if n_docs exceeds the numCandidates ceiling of 10000.
+        TimeoutError: If the index does not become ready, or does not report
+            n_docs, within the timeout.
     """
-    indexes = collection.list_search_indexes(index_name).to_list()
-    if len(indexes) == 0:
-        raise ValueError(f"Index {index_name} does not exist in collection {collection.name}")
-    index = indexes[0]
-    num_dimensions = index["latestDefinition"]["fields"][0]["numDimensions"]
-    field = index["latestDefinition"]["fields"][0]["path"]
+    if not isinstance(n_docs, int) or n_docs < 0:  # type: ignore[redundant-expr]
+        raise ValueError(f"{n_docs=} must be a nonnegative integer")
+    if n_docs == 0:
+        return True
+    if n_docs > 10000:
+        raise ValueError(f"{n_docs=} exceeds the $vectorSearch numCandidates ceiling of 10000.")
+
+    start = monotonic()
+    index = wait_for_index(collection, index_name, timeout)
+
+    # Confirm index type. Vector search indexes define an array of fields,
+    # only one of which is the vector. A fulltext index has "mappings" and no "fields".
+    fields = index["latestDefinition"].get("fields", [])
+    vector_fields = [f for f in fields if f.get("type") == "vector"]
+    if not vector_fields:
+        raise ValueError(
+            f"Index {index_name} is not a vector search index with an explicit vector field. "
+            "Use wait_for_fulltext_docs_in_index for fulltext indexes."
+        )
+    field = vector_fields[0]["path"]
+    num_dimensions = vector_fields[0]["numDimensions"]
 
     query_vector = [0.001] * num_dimensions  # Dummy vector
-    query = [
+    pipeline = [
         {
             "$vectorSearch": {
                 "index": index_name,
                 "path": field,
                 "queryVector": query_vector,
-                "numCandidates": n_docs,
+                "numCandidates": num_candidates or min(10 * n_docs, 10000),
                 "limit": n_docs,
             }
         },
-        {"$project": {"_id": 1, "search_score": {"$meta": "vectorSearchScore"}}},
     ]
+
+    return wait_to_be_indexed(collection, index_name, pipeline, n_docs, start, timeout)
+
+
+def wait_for_fulltext_docs_in_index(
+    collection: Collection[Any],
+    index_name: str,
+    path: str,
+    *,
+    n_docs: int | None = None,
+    timeout: float = TIMEOUT,
+) -> Literal[True]:
+    """Wait until a fulltext index has indexed the expected number of documents.
+
+    Creating an index and waiting for it to become READY does not wait for
+    documents inserted afterwards to become searchable. Callers that query an
+    index right after writing to it must wait for mongot to catch up, or they
+    see a partial or empty result set.
+
+    Args:
+        collection (Collection): A MongoDB Collection.
+        index_name (str): The name of the fulltext index.
+        path (str): The indexed field to query, e.g. "text" or "title.text".
+        n_docs (Optional[int]): The number of documents the index is expected to
+            hold with a value at `path`. Note that this counts documents *having*
+            that field, not documents in the collection.
+            The wait stops once the index reports at least this many.
+            Defaults to the number of documents in the collection that have a
+            value at `path`, which is the same population the index counts.
+            Returns True if n_docs == 0 without consulting index.
+        timeout (float): Number of seconds to wait before giving up.
+
+    Returns:
+        True, once the index reports n_docs documents.
+
+    Raises:
+        ValueError: If the index is not a fulltext search index.
+        TimeoutError: If the index does not become ready, or does not report
+            n_docs, within the timeout.
+    """
     start = monotonic()
-    while monotonic() - start <= TIMEOUT:
-        if len(collection.aggregate(query).to_list()) == n_docs:
-            return True
-        else:
-            sleep(INTERVAL)
-    return False
+
+    n_docs = collection.count_documents({path: {"$exists": True}}) if n_docs is None else n_docs
+    if n_docs < 0:
+        raise ValueError(f"{n_docs=} must be a nonnegative integer")
+    if n_docs == 0:
+        return True
+
+    index = wait_for_index(collection, index_name, timeout)
+
+    # Confirm index type.
+    # fulltext index always defines "mappings", a vector one never does.
+    if "mappings" not in index["latestDefinition"]:
+        raise ValueError(
+            f"Index {index_name} is not a fulltext search index. "
+            "Use wait_for_docs_in_index for vector search indexes."
+        )
+
+    pipeline: list[dict[str, Any]] = [
+        {"$search": {"index": index_name, "exists": {"path": path}}},
+    ]
+
+    return wait_to_be_indexed(collection, index_name, pipeline, n_docs, start, timeout)
