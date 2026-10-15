@@ -17,8 +17,6 @@ ______________________________________________________________________
   raises `ValueError` when given a fulltext index. Its docstring documented a parameter
   that does not exist.
 
-
-
 ## Changes in version 0.3.0 (2026/2/3)
 
 - Add utilities for MongoDB schema and LLM text to command parsing.
