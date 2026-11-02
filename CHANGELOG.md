@@ -4,6 +4,7 @@ ______________________________________________________________________
 
 ## Changes in version 0.4.0 (XXXX/XX/XX)
 
+- Add support for Python 3.15.
 - Dropped support for Python 3.10. The minimum supported Python version is now 3.11.
 - Add `wait_for_fulltext_docs_in_index`, which waits for a fulltext index to catch up
   with documents inserted after the index was created.
